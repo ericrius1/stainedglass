@@ -33,7 +33,7 @@
 
     <script type="module">
         import * as THREE from 'three/webgpu';
-        import { uniform, frameId, float, pass, texture3D, time, screenCoordinate, texture, Fn, vec3, uv } from 'three/tsl';
+        import { uniform, frameId, pass, texture3D, time, screenCoordinate, texture, Fn, vec3, uv, normalView } from 'three/tsl';
 
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
@@ -44,7 +44,6 @@
         let postProcessing;
         let glassPanel, glassMaterial;
         let spotLight;
-        let stainedGlassTexture;
 
         const LAYER_VOLUMETRIC_LIGHTING = 10;
 
@@ -54,86 +53,104 @@
             'Waterfalls': 'publiic/textures/stainedglass/waterfalls.jpg'
         };
 
+        // Get initial texture from URL or default
+        const urlParams = new URLSearchParams(window.location.search);
+        const initialTexture = urlParams.get('texture') || 'Solar Windmill';
+
         const params = {
-            texture: 'Solar Windmill',
-            smokeAmount: 3,
-            bloomIntensity: 0.7
+            texture: initialTexture,
+            smokeAmount: 4,
+            bloomIntensity: 0.3,
+            causticIntensity: 25
         };
 
-        let smokeAmountUniform, volumetricLightingIntensity;
+        let smokeAmountUniform, volumetricLightingIntensity, causticIntensityUniform;
+        let stainedGlassTexture;
 
         init();
 
         async function init() {
-            // Camera
-            camera = new THREE.PerspectiveCamera(25, window.innerWidth / window.innerHeight, 0.025, 5);
-            camera.position.set(-1.2, 0.5, 0.8);
+            // Camera - position to see the light rays from the side
+            camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.025, 10);
+            camera.position.set(-1.0, 0.4, 1.0);
 
             scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050508);
 
-            // Spot Light
-            spotLight = new THREE.SpotLight(0xffffff, 1);
-            spotLight.position.set(0, 0.6, 0);
-            spotLight.castShadow = true;
-            spotLight.angle = Math.PI / 4;
-            spotLight.penumbra = 1;
-            spotLight.decay = 2;
-            spotLight.distance = 0;
-            spotLight.shadow.mapType = THREE.HalfFloatType;
-            spotLight.shadow.mapSize.width = 1024;
-            spotLight.shadow.mapSize.height = 1024;
-            spotLight.shadow.camera.near = 0.1;
-            spotLight.shadow.camera.far = 1;
-            spotLight.shadow.bias = -0.003;
-            spotLight.shadow.intensity = 0.95;
-            spotLight.layers.enable(LAYER_VOLUMETRIC_LIGHTING);
-            scene.add(spotLight);
-
-            // Load stained glass texture
+            // Load stained glass texture first
             const textureLoader = new THREE.TextureLoader();
             stainedGlassTexture = await textureLoader.loadAsync(texturePaths[params.texture]);
             stainedGlassTexture.colorSpace = THREE.SRGBColorSpace;
             stainedGlassTexture.wrapS = stainedGlassTexture.wrapT = THREE.ClampToEdgeWrapping;
 
+            // Spot Light - positioned ABOVE the glass panel, shining DOWN
+            spotLight = new THREE.SpotLight(0xffffff, 2);
+            spotLight.position.set(0, 0.8, 0);
+            spotLight.target.position.set(0, 0, 0);
+            spotLight.castShadow = true;
+            spotLight.angle = Math.PI / 5;
+            spotLight.penumbra = 0.5;
+            spotLight.decay = 1;
+            spotLight.distance = 3;
+            spotLight.shadow.mapType = THREE.HalfFloatType;
+            spotLight.shadow.mapSize.width = 2048;
+            spotLight.shadow.mapSize.height = 2048;
+            spotLight.shadow.camera.near = 0.1;
+            spotLight.shadow.camera.far = 2;
+            spotLight.shadow.bias = -0.001;
+            spotLight.shadow.intensity = 1;
+            spotLight.layers.enable(LAYER_VOLUMETRIC_LIGHTING);
+            scene.add(spotLight);
+            scene.add(spotLight.target);
+
+            // Uniforms for dynamic control
+            causticIntensityUniform = uniform(params.causticIntensity);
+
+            // TSL Caustic shader - projects stained glass colors onto shadows
+            const causticEffect = Fn(() => {
+                const textureUV = uv();
+                const causticColor = texture(stainedGlassTexture, textureUV);
+                // Use normal to add depth variation
+                const viewZ = normalView.z.abs().pow(0.3);
+                return causticColor.rgb.mul(causticIntensityUniform).mul(viewZ);
+            })().toVar();
+
             // Stained glass panel material
             glassMaterial = new THREE.MeshPhysicalNodeMaterial();
             glassMaterial.side = THREE.DoubleSide;
             glassMaterial.transparent = true;
-            glassMaterial.color = new THREE.Color(0xffffff);
-            glassMaterial.transmission = 1;
-            glassMaterial.thickness = 0.1;
+            glassMaterial.transmission = 0.9;
+            glassMaterial.thickness = 0.05;
             glassMaterial.ior = 1.5;
             glassMaterial.metalness = 0;
-            glassMaterial.roughness = 0.1;
+            glassMaterial.roughness = 0.05;
+            glassMaterial.map = stainedGlassTexture;
 
-            // Glass panel geometry
-            const panelGeometry = new THREE.PlaneGeometry(0.4, 0.4);
+            // This is the key - castShadowNode projects the colors through the shadow
+            glassMaterial.castShadowNode = causticEffect;
+
+            // Slight emissive to see the texture on the panel itself
+            glassMaterial.emissiveNode = Fn(() => {
+                return texture(stainedGlassTexture, uv()).rgb.mul(0.15);
+            })();
+
+            // Glass panel - positioned between light and ground
+            const panelGeometry = new THREE.PlaneGeometry(0.5, 0.5);
             glassPanel = new THREE.Mesh(panelGeometry, glassMaterial);
-            glassPanel.position.set(0, 0.25, 0);
-            glassPanel.rotation.x = -Math.PI / 6;
+            glassPanel.position.set(0, 0.35, 0);
+            glassPanel.rotation.x = -Math.PI / 2.5; // Tilted to catch and redirect light
             glassPanel.castShadow = true;
             scene.add(glassPanel);
 
-            // TSL Caustic shader - projects stained glass colors
-            const causticEffect = Fn(() => {
-                const textureUV = uv();
-                const causticColor = texture(stainedGlassTexture, textureUV);
-                return causticColor.rgb.mul(60);
-            })().toVar();
-
-            glassMaterial.castShadowNode = causticEffect;
-
-            // Emissive glow from the glass
-            glassMaterial.emissiveNode = Fn(() => {
-                const textureUV = uv();
-                return texture(stainedGlassTexture, textureUV).rgb.mul(0.5);
-            })();
-
-            // Ground plane
-            const groundGeometry = new THREE.PlaneGeometry(2, 2);
-            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            // Ground plane to receive the colored shadows
+            const groundGeometry = new THREE.PlaneGeometry(3, 3);
+            const groundMaterial = new THREE.MeshStandardMaterial({
+                color: 0x222222,
+                roughness: 0.8
+            });
             const ground = new THREE.Mesh(groundGeometry, groundMaterial);
             ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.2;
             ground.receiveShadow = true;
             scene.add(ground);
 
@@ -159,9 +176,9 @@
                 let i = 0;
                 const size = 128;
                 const data = new Uint8Array(size * size * size);
-                const scale = 10;
+                const scale = 8;
                 const perlin = new ImprovedNoise();
-                const repeatFactor = 5.0;
+                const repeatFactor = 4.0;
 
                 for (let z = 0; z < size; z++) {
                     for (let y = 0; y < size; y++) {
@@ -190,30 +207,30 @@
             const noiseTexture3D = createTexture3D();
             smokeAmountUniform = uniform(params.smokeAmount);
 
-            // Volumetric material
+            // Volumetric material for fog
             const volumetricMaterial = new THREE.VolumeNodeMaterial();
-            volumetricMaterial.steps = 20;
+            volumetricMaterial.steps = 25;
             volumetricMaterial.offsetNode = bayer16(screenCoordinate.add(frameId));
             volumetricMaterial.scatteringNode = Fn(({ positionRay }) => {
-                const timeScaled = vec3(time.mul(0.01), 0, time.mul(0.03));
+                const timeScaled = vec3(time.mul(0.015), time.mul(0.005), time.mul(0.02));
 
                 const sampleGrain = (scale, timeScale = 1) =>
                     texture3D(noiseTexture3D, positionRay.add(timeScaled.mul(timeScale)).mul(scale).mod(1), 0).r.add(0.5);
 
                 let density = sampleGrain(1);
-                density = density.mul(sampleGrain(0.5, 1));
-                density = density.mul(sampleGrain(0.2, 2));
+                density = density.mul(sampleGrain(0.5, 0.8));
+                density = density.mul(sampleGrain(0.25, 1.5));
 
                 return smokeAmountUniform.mix(1, density);
             });
 
-            // Volumetric fog box
+            // Volumetric fog box - covers the area between light and ground
             const volumetricMesh = new THREE.Mesh(
-                new THREE.BoxGeometry(1.5, 0.5, 1.5),
+                new THREE.BoxGeometry(1.2, 0.8, 1.2),
                 volumetricMaterial
             );
             volumetricMesh.receiveShadow = true;
-            volumetricMesh.position.y = 0.25;
+            volumetricMesh.position.y = 0.2;
             volumetricMesh.layers.disableAll();
             volumetricMesh.layers.enable(LAYER_VOLUMETRIC_LIGHTING);
             scene.add(volumetricMesh);
@@ -230,8 +247,8 @@
             volumetricPass.setLayers(volumetricLayer);
             volumetricPass.setResolutionScale(0.5);
 
-            // Bloom on volumetric pass
-            const bloomPass = bloom(volumetricPass, 1, 1, 0);
+            // Bloom on volumetric pass - keep it subtle
+            const bloomPass = bloom(volumetricPass, 0.8, 0.5, 0);
 
             // Compose final output
             const scenePassColor = scenePass.add(bloomPass.mul(volumetricLightingIntensity));
@@ -239,8 +256,9 @@
 
             // Controls
             controls = new OrbitControls(camera, renderer.domElement);
-            controls.target.set(0, 0.1, 0);
-            controls.maxDistance = 2;
+            controls.target.set(0, 0.15, 0);
+            controls.maxDistance = 3;
+            controls.minDistance = 0.3;
             controls.update();
 
             // Tweakpane
@@ -259,20 +277,20 @@
                     'Tree': 'Tree',
                     'Waterfalls': 'Waterfalls'
                 }
-            }).on('change', async (ev) => {
-                const newTex = await textureLoader.loadAsync(texturePaths[ev.value]);
-                newTex.colorSpace = THREE.SRGBColorSpace;
-                newTex.wrapS = newTex.wrapT = THREE.ClampToEdgeWrapping;
-                stainedGlassTexture = newTex;
-                // Need to recreate material to update TSL nodes
-                glassMaterial.dispose();
-                location.reload(); // Simple reload for texture change
+            }).on('change', (ev) => {
+                // Update URL and reload to change texture
+                const url = new URL(window.location);
+                url.searchParams.set('texture', ev.value);
+                window.location.href = url;
             });
+
+            pane.addBinding(params, 'causticIntensity', { min: 1, max: 60, step: 1, label: 'Caustic Intensity' })
+                .on('change', (ev) => { causticIntensityUniform.value = ev.value; });
 
             pane.addBinding(params, 'smokeAmount', { min: 0, max: 10, step: 0.1, label: 'Fog Density' })
                 .on('change', (ev) => { smokeAmountUniform.value = ev.value; });
 
-            pane.addBinding(params, 'bloomIntensity', { min: 0, max: 2, step: 0.05, label: 'Bloom' })
+            pane.addBinding(params, 'bloomIntensity', { min: 0, max: 1, step: 0.02, label: 'Bloom' })
                 .on('change', (ev) => { volumetricLightingIntensity.value = ev.value; });
         }
 
