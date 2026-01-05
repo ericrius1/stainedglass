@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Stained Glass Volumetric Caustics</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-family: sans-serif;
+            font-size: 14px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Stained Glass Volumetric Caustics</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./node_modules/three/build/three.webgpu.js",
+                "three/webgpu": "./node_modules/three/build/three.webgpu.js",
+                "three/tsl": "./node_modules/three/build/three.tsl.js",
+                "three/addons/": "./node_modules/three/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three/webgpu';
+        import { uniform, frameId, float, pass, texture3D, time, screenCoordinate, texture, Fn, vec3, uv } from 'three/tsl';
+
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
+        import { bayer16 } from 'three/addons/tsl/math/Bayer.js';
+        import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+
+        let camera, scene, renderer, controls;
+        let postProcessing;
+        let glassPanel, glassMaterial;
+        let spotLight;
+        let stainedGlassTexture;
+
+        const LAYER_VOLUMETRIC_LIGHTING = 10;
+
+        const texturePaths = {
+            'Solar Windmill': 'publiic/textures/stainedglass/solarwindmill2.png',
+            'Tree': 'publiic/textures/stainedglass/tree.png',
+            'Waterfalls': 'publiic/textures/stainedglass/waterfalls.jpg'
+        };
+
+        const params = {
+            texture: 'Solar Windmill',
+            smokeAmount: 3,
+            bloomIntensity: 0.7
+        };
+
+        let smokeAmountUniform, volumetricLightingIntensity;
+
+        init();
+
+        async function init() {
+            // Camera
+            camera = new THREE.PerspectiveCamera(25, window.innerWidth / window.innerHeight, 0.025, 5);
+            camera.position.set(-1.2, 0.5, 0.8);
+
+            scene = new THREE.Scene();
+
+            // Spot Light
+            spotLight = new THREE.SpotLight(0xffffff, 1);
+            spotLight.position.set(0, 0.6, 0);
+            spotLight.castShadow = true;
+            spotLight.angle = Math.PI / 4;
+            spotLight.penumbra = 1;
+            spotLight.decay = 2;
+            spotLight.distance = 0;
+            spotLight.shadow.mapType = THREE.HalfFloatType;
+            spotLight.shadow.mapSize.width = 1024;
+            spotLight.shadow.mapSize.height = 1024;
+            spotLight.shadow.camera.near = 0.1;
+            spotLight.shadow.camera.far = 1;
+            spotLight.shadow.bias = -0.003;
+            spotLight.shadow.intensity = 0.95;
+            spotLight.layers.enable(LAYER_VOLUMETRIC_LIGHTING);
+            scene.add(spotLight);
+
+            // Load stained glass texture
+            const textureLoader = new THREE.TextureLoader();
+            stainedGlassTexture = await textureLoader.loadAsync(texturePaths[params.texture]);
+            stainedGlassTexture.colorSpace = THREE.SRGBColorSpace;
+            stainedGlassTexture.wrapS = stainedGlassTexture.wrapT = THREE.ClampToEdgeWrapping;
+
+            // Stained glass panel material
+            glassMaterial = new THREE.MeshPhysicalNodeMaterial();
+            glassMaterial.side = THREE.DoubleSide;
+            glassMaterial.transparent = true;
+            glassMaterial.color = new THREE.Color(0xffffff);
+            glassMaterial.transmission = 1;
+            glassMaterial.thickness = 0.1;
+            glassMaterial.ior = 1.5;
+            glassMaterial.metalness = 0;
+            glassMaterial.roughness = 0.1;
+
+            // Glass panel geometry
+            const panelGeometry = new THREE.PlaneGeometry(0.4, 0.4);
+            glassPanel = new THREE.Mesh(panelGeometry, glassMaterial);
+            glassPanel.position.set(0, 0.25, 0);
+            glassPanel.rotation.x = -Math.PI / 6;
+            glassPanel.castShadow = true;
+            scene.add(glassPanel);
+
+            // TSL Caustic shader - projects stained glass colors
+            const causticEffect = Fn(() => {
+                const textureUV = uv();
+                const causticColor = texture(stainedGlassTexture, textureUV);
+                return causticColor.rgb.mul(60);
+            })().toVar();
+
+            glassMaterial.castShadowNode = causticEffect;
+
+            // Emissive glow from the glass
+            glassMaterial.emissiveNode = Fn(() => {
+                const textureUV = uv();
+                return texture(stainedGlassTexture, textureUV).rgb.mul(0.5);
+            })();
+
+            // Ground plane
+            const groundGeometry = new THREE.PlaneGeometry(2, 2);
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Renderer
+            renderer = new THREE.WebGPURenderer({ antialias: true });
+            renderer.shadowMap.enabled = true;
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setAnimationLoop(animate);
+            document.body.appendChild(renderer.domElement);
+
+            // Post-Processing
+            postProcessing = new THREE.PostProcessing(renderer);
+
+            volumetricLightingIntensity = uniform(params.bloomIntensity);
+
+            const volumetricLayer = new THREE.Layers();
+            volumetricLayer.disableAll();
+            volumetricLayer.enable(LAYER_VOLUMETRIC_LIGHTING);
+
+            // 3D Noise Texture for Volumetric Fog
+            function createTexture3D() {
+                let i = 0;
+                const size = 128;
+                const data = new Uint8Array(size * size * size);
+                const scale = 10;
+                const perlin = new ImprovedNoise();
+                const repeatFactor = 5.0;
+
+                for (let z = 0; z < size; z++) {
+                    for (let y = 0; y < size; y++) {
+                        for (let x = 0; x < size; x++) {
+                            const nx = (x / size) * repeatFactor;
+                            const ny = (y / size) * repeatFactor;
+                            const nz = (z / size) * repeatFactor;
+                            const noiseValue = perlin.noise(nx * scale, ny * scale, nz * scale);
+                            data[i] = (128 + 128 * noiseValue);
+                            i++;
+                        }
+                    }
+                }
+
+                const tex = new THREE.Data3DTexture(data, size, size, size);
+                tex.format = THREE.RedFormat;
+                tex.minFilter = THREE.LinearFilter;
+                tex.magFilter = THREE.LinearFilter;
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                tex.unpackAlignment = 1;
+                tex.needsUpdate = true;
+                return tex;
+            }
+
+            const noiseTexture3D = createTexture3D();
+            smokeAmountUniform = uniform(params.smokeAmount);
+
+            // Volumetric material
+            const volumetricMaterial = new THREE.VolumeNodeMaterial();
+            volumetricMaterial.steps = 20;
+            volumetricMaterial.offsetNode = bayer16(screenCoordinate.add(frameId));
+            volumetricMaterial.scatteringNode = Fn(({ positionRay }) => {
+                const timeScaled = vec3(time.mul(0.01), 0, time.mul(0.03));
+
+                const sampleGrain = (scale, timeScale = 1) =>
+                    texture3D(noiseTexture3D, positionRay.add(timeScaled.mul(timeScale)).mul(scale).mod(1), 0).r.add(0.5);
+
+                let density = sampleGrain(1);
+                density = density.mul(sampleGrain(0.5, 1));
+                density = density.mul(sampleGrain(0.2, 2));
+
+                return smokeAmountUniform.mix(1, density);
+            });
+
+            // Volumetric fog box
+            const volumetricMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 0.5, 1.5),
+                volumetricMaterial
+            );
+            volumetricMesh.receiveShadow = true;
+            volumetricMesh.position.y = 0.25;
+            volumetricMesh.layers.disableAll();
+            volumetricMesh.layers.enable(LAYER_VOLUMETRIC_LIGHTING);
+            scene.add(volumetricMesh);
+
+            // Scene Pass
+            const scenePass = pass(scene, camera);
+            const sceneDepth = scenePass.getTextureNode('depth');
+
+            // Apply depth occlusion to volumetric material
+            volumetricMaterial.depthNode = sceneDepth.sample(THREE.screenUV);
+
+            // Volumetric Lighting Pass
+            const volumetricPass = pass(scene, camera, { depthBuffer: false, samples: 0 });
+            volumetricPass.setLayers(volumetricLayer);
+            volumetricPass.setResolutionScale(0.5);
+
+            // Bloom on volumetric pass
+            const bloomPass = bloom(volumetricPass, 1, 1, 0);
+
+            // Compose final output
+            const scenePassColor = scenePass.add(bloomPass.mul(volumetricLightingIntensity));
+            postProcessing.outputNode = scenePassColor;
+
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 0.1, 0);
+            controls.maxDistance = 2;
+            controls.update();
+
+            // Tweakpane
+            setupTweakpane(textureLoader);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        async function setupTweakpane(textureLoader) {
+            const { Pane } = await import('https://cdn.jsdelivr.net/npm/tweakpane@4.0.3/dist/tweakpane.min.js');
+            const pane = new Pane({ title: 'Stained Glass' });
+
+            pane.addBinding(params, 'texture', {
+                options: {
+                    'Solar Windmill': 'Solar Windmill',
+                    'Tree': 'Tree',
+                    'Waterfalls': 'Waterfalls'
+                }
+            }).on('change', async (ev) => {
+                const newTex = await textureLoader.loadAsync(texturePaths[ev.value]);
+                newTex.colorSpace = THREE.SRGBColorSpace;
+                newTex.wrapS = newTex.wrapT = THREE.ClampToEdgeWrapping;
+                stainedGlassTexture = newTex;
+                // Need to recreate material to update TSL nodes
+                glassMaterial.dispose();
+                location.reload(); // Simple reload for texture change
+            });
+
+            pane.addBinding(params, 'smokeAmount', { min: 0, max: 10, step: 0.1, label: 'Fog Density' })
+                .on('change', (ev) => { smokeAmountUniform.value = ev.value; });
+
+            pane.addBinding(params, 'bloomIntensity', { min: 0, max: 2, step: 0.05, label: 'Bloom' })
+                .on('change', (ev) => { volumetricLightingIntensity.value = ev.value; });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            controls.update();
+            postProcessing.render();
+        }
+    </script>
+</body>
+</html>

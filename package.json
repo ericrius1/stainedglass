@@ -1,0 +1,12 @@
+{
+  "name": "stainedglass-caustics",
+  "version": "1.0.0",
+  "description": "Stained glass volumetric caustics with Three.js WebGPU",
+  "scripts": {
+    "dev": "npx serve .",
+    "start": "npx serve ."
+  },
+  "dependencies": {
+    "three": "^0.182.0"
+  }
+}
