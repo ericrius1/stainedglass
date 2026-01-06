@@ -325,7 +325,7 @@ async function init() {
 function setupTweakpane(textureLoader) {
   const pane = new Pane({ title: "Stained Glass" })
 
-  // Texture selection
+  // Texture selection - swap texture without reloading
   pane
     .addBinding(params, "texture", {
       options: {
@@ -334,10 +334,11 @@ function setupTweakpane(textureLoader) {
         Waterfalls: "Waterfalls"
       }
     })
-    .on("change", (ev) => {
-      const url = new URL(window.location)
-      url.searchParams.set("texture", ev.value)
-      window.location.href = url
+    .on("change", async (ev) => {
+      // Load new texture image into existing texture object
+      const newImage = await new THREE.ImageLoader().loadAsync(texturePaths[ev.value])
+      stainedGlassTexture.image = newImage
+      stainedGlassTexture.needsUpdate = true
     })
 
   // Caustics folder
