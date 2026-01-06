@@ -52,41 +52,47 @@ let stainedGlassTexture
 init()
 
 async function init() {
-  // Camera - position to see the light rays from the side
+  // Camera - position to see the scene nicely
   camera = new THREE.PerspectiveCamera(
-    30,
+    35,
     window.innerWidth / window.innerHeight,
-    0.025,
-    10
+    0.1,
+    20
   )
-  camera.position.set(-1.0, 0.4, 1.0)
+  camera.position.set(-1.5, 1.0, 1.5)
 
   scene = new THREE.Scene()
   scene.background = new THREE.Color(0x050508)
 
-  // Load stained glass texture first
+  // Load textures
   const textureLoader = new THREE.TextureLoader()
+
+  // Stained glass texture for colors
   stainedGlassTexture = await textureLoader.loadAsync(
     texturePaths[params.texture]
   )
   stainedGlassTexture.colorSpace = THREE.SRGBColorSpace
-  stainedGlassTexture.wrapS = stainedGlassTexture.wrapT =
-    THREE.ClampToEdgeWrapping
+  stainedGlassTexture.wrapS = stainedGlassTexture.wrapT = THREE.ClampToEdgeWrapping
 
-  // Spot Light - positioned ABOVE the glass panel, shining DOWN
-  spotLight = new THREE.SpotLight(0xffffff, 2)
-  spotLight.position.set(0, 0.8, 0)
+  // Caustic pattern texture for light refraction pattern
+  const causticMap = await textureLoader.loadAsync("/textures/caustic.jpg")
+  causticMap.wrapS = causticMap.wrapT = THREE.RepeatWrapping
+  causticMap.colorSpace = THREE.SRGBColorSpace
+
+  // Spot Light - positioned above, shining down through the glass
+  spotLight = new THREE.SpotLight(0xffffff, 3)
+  spotLight.position.set(0, 1.8, 0)
   spotLight.target.position.set(0, 0, 0)
   spotLight.castShadow = true
-  spotLight.angle = Math.PI / 5
-  spotLight.penumbra = 0.5
+  spotLight.angle = Math.PI / 4
+  spotLight.penumbra = 0.3
   spotLight.decay = 1
-  spotLight.distance = 3
+  spotLight.distance = 5
   spotLight.shadow.mapType = THREE.HalfFloatType
   spotLight.shadow.mapSize.width = 2048
   spotLight.shadow.mapSize.height = 2048
   spotLight.shadow.camera.near = 0.1
-  spotLight.shadow.camera.far = 2
+  spotLight.shadow.camera.far = 3
   spotLight.shadow.bias = -0.001
   spotLight.shadow.intensity = 1
   spotLight.layers.enable(LAYER_VOLUMETRIC_LIGHTING)
@@ -99,7 +105,7 @@ async function init() {
   const causticOcclusion = uniform(1.0)
 
   // TSL Caustic shader - projects stained glass colors onto shadows
-  // Uses refraction and chromatic aberration like the official example
+  // Uses caustic map + refraction + chromatic aberration like official example
   const causticEffect = Fn(() => {
     // Calculate refraction vector based on view direction and surface normal
     const refractionVector = refract(
@@ -111,36 +117,30 @@ async function init() {
     // View-dependent intensity falloff
     const viewZ = normalView.z.pow(causticOcclusion)
 
-    // Base UV from mesh UV, offset by refraction
-    const baseUV = uv()
-    const textureUV = baseUV.add(refractionVector.xy.mul(0.4))
+    // UV for caustic pattern - use refraction to create wavy projection
+    const causticUV = refractionVector.xy.mul(0.6)
 
-    // Chromatic aberration - separate RGB channels slightly
-    const chromaticOffset = normalView.z.pow(-0.9).mul(0.006)
+    // Chromatic aberration offset for rainbow edges
+    const chromaticOffset = normalView.z.pow(-0.9).mul(0.004)
 
-    // Sample texture with chromatic aberration for rainbow caustic effect
-    const causticProjection = vec3(
-      texture(
-        stainedGlassTexture,
-        textureUV.add(vec2(chromaticOffset.negate(), 0))
-      ).r,
-      texture(
-        stainedGlassTexture,
-        textureUV.add(vec2(0, chromaticOffset.negate()))
-      ).g,
-      texture(
-        stainedGlassTexture,
-        textureUV.add(vec2(chromaticOffset, chromaticOffset))
-      ).b
+    // Sample caustic map with chromatic aberration (like official example)
+    const causticPattern = vec3(
+      texture(causticMap, causticUV.add(vec2(chromaticOffset.negate(), 0))).r,
+      texture(causticMap, causticUV.add(vec2(0, chromaticOffset.negate()))).g,
+      texture(causticMap, causticUV.add(vec2(chromaticOffset, chromaticOffset))).b
     )
+
+    // Sample stained glass texture for color tinting
+    const glassColor = texture(stainedGlassTexture, uv()).rgb
 
     // Attenuate based on fog density
     const fogAttenuation = smokeAmountUniform.mul(0.12).add(1.0).reciprocal()
 
-    // Combine: caustic pattern * intensity * view falloff + base glow
-    return causticProjection
+    // Combine: caustic pattern * glass color * intensity + base glow
+    return causticPattern
       .mul(viewZ.mul(causticIntensityUniform))
-      .add(viewZ.mul(0.5))
+      .add(viewZ)
+      .mul(glassColor)
       .mul(fogAttenuation)
   })().toVar()
 
@@ -163,24 +163,24 @@ async function init() {
     return texture(stainedGlassTexture, uv()).rgb.mul(0.15)
   })()
 
-  // Glass panel - positioned between light and ground
-  const panelGeometry = new THREE.PlaneGeometry(0.5, 0.5)
+  // Glass panel - horizontal, between light and ground
+  const panelGeometry = new THREE.PlaneGeometry(0.8, 0.8)
   glassPanel = new THREE.Mesh(panelGeometry, glassMaterial)
-  glassPanel.position.set(0, 0.35, 0)
-  glassPanel.rotation.x = -Math.PI / 2.5 // Tilted to catch and redirect light
+  glassPanel.position.set(0, 1.0, 0)
+  glassPanel.rotation.x = -Math.PI / 2 // Horizontal, facing up
   glassPanel.castShadow = true
   scene.add(glassPanel)
 
   // Ground plane to receive the colored caustic shadows
-  const groundGeometry = new THREE.PlaneGeometry(3, 3)
+  const groundGeometry = new THREE.PlaneGeometry(4, 4)
   const groundMaterial = new THREE.MeshStandardMaterial({
-    color: 0x000000, // Dark ground to show caustics clearly
-    roughness: 0.9,
+    color: 0x111111,
+    roughness: 0.8,
     metalness: 0.0
   })
   const ground = new THREE.Mesh(groundGeometry, groundMaterial)
   ground.rotation.x = -Math.PI / 2
-  ground.position.y = 0.2
+  ground.position.y = 0
   ground.receiveShadow = true
   scene.add(ground)
 
@@ -257,13 +257,13 @@ async function init() {
     return smokeAmountUniform.mix(1, density)
   })
 
-  // Volumetric fog box - covers the area between light and ground
+  // Volumetric fog box - covers the space between glass and ground
   const volumetricMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(1.2, 0.8, 1.2),
+    new THREE.BoxGeometry(2, 1, 2),
     volumetricMaterial
   )
   volumetricMesh.receiveShadow = true
-  volumetricMesh.position.y = 0.2
+  volumetricMesh.position.y = 0.5 // Centered between ground (0) and glass (1)
   volumetricMesh.layers.disableAll()
   volumetricMesh.layers.enable(LAYER_VOLUMETRIC_LIGHTING)
   scene.add(volumetricMesh)
@@ -291,9 +291,9 @@ async function init() {
 
   // Controls
   controls = new OrbitControls(camera, renderer.domElement)
-  controls.target.set(0, 0.15, 0)
-  controls.maxDistance = 3
-  controls.minDistance = 0.3
+  controls.target.set(0, 0.5, 0)
+  controls.maxDistance = 5
+  controls.minDistance = 0.5
   controls.update()
 
   // Tweakpane
