@@ -9,9 +9,12 @@ import {
   texture,
   Fn,
   vec3,
+  vec2,
   uv,
   normalView,
-  metalness
+  positionViewDirection,
+  refract,
+  div
 } from "three/tsl"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import { ImprovedNoise } from "three/examples/jsm/math/ImprovedNoise.js"
@@ -40,7 +43,7 @@ const params = {
   texture: initialTexture,
   smokeAmount: 4,
   bloomIntensity: 0.3,
-  causticIntensity: 25
+  causticIntensity: 50
 }
 
 let smokeAmountUniform, volumetricLightingIntensity, causticIntensityUniform
@@ -93,17 +96,52 @@ async function init() {
   // Uniforms for dynamic control
   causticIntensityUniform = uniform(params.causticIntensity)
   smokeAmountUniform = uniform(params.smokeAmount)
+  const causticOcclusion = uniform(1.0)
 
   // TSL Caustic shader - projects stained glass colors onto shadows
-  // Fog density attenuates how much light reaches the ground
+  // Uses refraction and chromatic aberration like the official example
   const causticEffect = Fn(() => {
-    const textureUV = uv()
-    const causticColor = texture(stainedGlassTexture, textureUV)
-    // Use normal to add depth variation
-    const viewZ = normalView.z.abs().pow(0.3)
-    // Attenuate caustics based on fog density - denser fog = less light reaches ground
-    const fogAttenuation = smokeAmountUniform.mul(0.15).add(1.0).reciprocal()
-    return causticColor.rgb.mul(causticIntensityUniform).mul(viewZ).mul(fogAttenuation)
+    // Calculate refraction vector based on view direction and surface normal
+    const refractionVector = refract(
+      positionViewDirection.negate(),
+      normalView,
+      div(1.0, 1.5) // IOR of glass
+    ).normalize()
+
+    // View-dependent intensity falloff
+    const viewZ = normalView.z.pow(causticOcclusion)
+
+    // Base UV from mesh UV, offset by refraction
+    const baseUV = uv()
+    const textureUV = baseUV.add(refractionVector.xy.mul(0.4))
+
+    // Chromatic aberration - separate RGB channels slightly
+    const chromaticOffset = normalView.z.pow(-0.9).mul(0.006)
+
+    // Sample texture with chromatic aberration for rainbow caustic effect
+    const causticProjection = vec3(
+      texture(
+        stainedGlassTexture,
+        textureUV.add(vec2(chromaticOffset.negate(), 0))
+      ).r,
+      texture(
+        stainedGlassTexture,
+        textureUV.add(vec2(0, chromaticOffset.negate()))
+      ).g,
+      texture(
+        stainedGlassTexture,
+        textureUV.add(vec2(chromaticOffset, chromaticOffset))
+      ).b
+    )
+
+    // Attenuate based on fog density
+    const fogAttenuation = smokeAmountUniform.mul(0.12).add(1.0).reciprocal()
+
+    // Combine: caustic pattern * intensity * view falloff + base glow
+    return causticProjection
+      .mul(viewZ.mul(causticIntensityUniform))
+      .add(viewZ.mul(0.5))
+      .mul(fogAttenuation)
   })().toVar()
 
   // Stained glass panel material
@@ -133,16 +171,16 @@ async function init() {
   glassPanel.castShadow = true
   scene.add(glassPanel)
 
-  // Ground plane to receive the colored shadows
+  // Ground plane to receive the colored caustic shadows
   const groundGeometry = new THREE.PlaneGeometry(3, 3)
   const groundMaterial = new THREE.MeshStandardMaterial({
-    color: 0x222222,
-    roughness: 1,
-    metalness: 1
+    color: 0x000000, // Dark ground to show caustics clearly
+    roughness: 0.9,
+    metalness: 0.0
   })
   const ground = new THREE.Mesh(groundGeometry, groundMaterial)
   ground.rotation.x = -Math.PI / 2
-  ground.position.y = -0.2
+  ground.position.y = 0.2
   ground.receiveShadow = true
   scene.add(ground)
 
@@ -285,7 +323,7 @@ function setupTweakpane(textureLoader) {
   pane
     .addBinding(params, "causticIntensity", {
       min: 1,
-      max: 60,
+      max: 100,
       step: 1,
       label: "Caustic Intensity"
     })
