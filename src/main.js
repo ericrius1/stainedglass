@@ -41,12 +41,23 @@ const initialTexture = urlParams.get("texture") || "Solar Windmill"
 
 const params = {
   texture: initialTexture,
+  // Fog & Bloom
   smokeAmount: 4,
   bloomIntensity: 0.3,
-  causticIntensity: 50
+  // Caustics
+  causticIntensity: 50,
+  causticScale: 0.6,
+  chromaticAberration: 0.004,
+  causticOcclusion: 1.0,
+  refractionStrength: 0.6,
+  // Glass
+  glassIOR: 1.5,
+  glassEmissive: 0.15
 }
 
 let smokeAmountUniform, volumetricLightingIntensity, causticIntensityUniform
+let causticScaleUniform, chromaticAberrationUniform, causticOcclusionUniform
+let refractionStrengthUniform, glassIORUniform, glassEmissiveUniform
 let stainedGlassTexture
 
 init()
@@ -72,7 +83,8 @@ async function init() {
     texturePaths[params.texture]
   )
   stainedGlassTexture.colorSpace = THREE.SRGBColorSpace
-  stainedGlassTexture.wrapS = stainedGlassTexture.wrapT = THREE.ClampToEdgeWrapping
+  stainedGlassTexture.wrapS = stainedGlassTexture.wrapT =
+    THREE.ClampToEdgeWrapping
 
   // Caustic pattern texture for light refraction pattern
   const causticMap = await textureLoader.loadAsync("/textures/caustic.jpg")
@@ -102,7 +114,12 @@ async function init() {
   // Uniforms for dynamic control
   causticIntensityUniform = uniform(params.causticIntensity)
   smokeAmountUniform = uniform(params.smokeAmount)
-  const causticOcclusion = uniform(1.0)
+  causticScaleUniform = uniform(params.causticScale)
+  chromaticAberrationUniform = uniform(params.chromaticAberration)
+  causticOcclusionUniform = uniform(params.causticOcclusion)
+  refractionStrengthUniform = uniform(params.refractionStrength)
+  glassIORUniform = uniform(params.glassIOR)
+  glassEmissiveUniform = uniform(params.glassEmissive)
 
   // TSL Caustic shader - projects stained glass colors onto shadows
   // Uses caustic map + refraction + chromatic aberration like official example
@@ -111,23 +128,26 @@ async function init() {
     const refractionVector = refract(
       positionViewDirection.negate(),
       normalView,
-      div(1.0, 1.5) // IOR of glass
+      div(1.0, glassIORUniform)
     ).normalize()
 
     // View-dependent intensity falloff
-    const viewZ = normalView.z.pow(causticOcclusion)
+    const viewZ = normalView.z.pow(causticOcclusionUniform)
 
     // UV for caustic pattern - use refraction to create wavy projection
-    const causticUV = refractionVector.xy.mul(0.6)
+    const causticUV = refractionVector.xy.mul(causticScaleUniform)
 
     // Chromatic aberration offset for rainbow edges
-    const chromaticOffset = normalView.z.pow(-0.9).mul(0.004)
+    const chromaticOffset = normalView.z
+      .pow(-0.9)
+      .mul(chromaticAberrationUniform)
 
     // Sample caustic map with chromatic aberration (like official example)
     const causticPattern = vec3(
       texture(causticMap, causticUV.add(vec2(chromaticOffset.negate(), 0))).r,
       texture(causticMap, causticUV.add(vec2(0, chromaticOffset.negate()))).g,
-      texture(causticMap, causticUV.add(vec2(chromaticOffset, chromaticOffset))).b
+      texture(causticMap, causticUV.add(vec2(chromaticOffset, chromaticOffset)))
+        .b
     )
 
     // Sample stained glass texture for color tinting
@@ -158,9 +178,9 @@ async function init() {
   // This is the key - castShadowNode projects the colors through the shadow
   glassMaterial.castShadowNode = causticEffect
 
-  // Slight emissive to see the texture on the panel itself
+  // Emissive glow to see the texture on the panel itself
   glassMaterial.emissiveNode = Fn(() => {
-    return texture(stainedGlassTexture, uv()).rgb.mul(0.15)
+    return texture(stainedGlassTexture, uv()).rgb.mul(glassEmissiveUniform)
   })()
 
   // Glass panel - horizontal, between light and ground
@@ -305,6 +325,7 @@ async function init() {
 function setupTweakpane(textureLoader) {
   const pane = new Pane({ title: "Stained Glass" })
 
+  // Texture selection
   pane
     .addBinding(params, "texture", {
       options: {
@@ -314,24 +335,87 @@ function setupTweakpane(textureLoader) {
       }
     })
     .on("change", (ev) => {
-      // Update URL and reload to change texture
       const url = new URL(window.location)
       url.searchParams.set("texture", ev.value)
       window.location.href = url
     })
 
-  pane
+  // Caustics folder
+  const causticsFolder = pane.addFolder({ title: "Caustics" })
+
+  causticsFolder
     .addBinding(params, "causticIntensity", {
       min: 1,
-      max: 100,
+      max: 150,
       step: 1,
-      label: "Caustic Intensity"
+      label: "Intensity"
     })
     .on("change", (ev) => {
       causticIntensityUniform.value = ev.value
     })
 
-  pane
+  causticsFolder
+    .addBinding(params, "causticScale", {
+      min: 0.1,
+      max: 2.0,
+      step: 0.05,
+      label: "Pattern Scale"
+    })
+    .on("change", (ev) => {
+      causticScaleUniform.value = ev.value
+    })
+
+  causticsFolder
+    .addBinding(params, "chromaticAberration", {
+      min: 0,
+      max: 0.02,
+      step: 0.001,
+      label: "Chromatic"
+    })
+    .on("change", (ev) => {
+      chromaticAberrationUniform.value = ev.value
+    })
+
+  causticsFolder
+    .addBinding(params, "causticOcclusion", {
+      min: 0.1,
+      max: 5,
+      step: 0.1,
+      label: "Occlusion"
+    })
+    .on("change", (ev) => {
+      causticOcclusionUniform.value = ev.value
+    })
+
+  // Glass folder
+  const glassFolder = pane.addFolder({ title: "Glass" })
+
+  glassFolder
+    .addBinding(params, "glassIOR", {
+      min: 0.05,
+      max: 2.5,
+      step: 0.01,
+      label: "IOR"
+    })
+    .on("change", (ev) => {
+      glassIORUniform.value = ev.value
+    })
+
+  glassFolder
+    .addBinding(params, "glassEmissive", {
+      min: 0,
+      max: 1,
+      step: 0.05,
+      label: "Emissive"
+    })
+    .on("change", (ev) => {
+      glassEmissiveUniform.value = ev.value
+    })
+
+  // Atmosphere folder
+  const atmosphereFolder = pane.addFolder({ title: "Atmosphere" })
+
+  atmosphereFolder
     .addBinding(params, "smokeAmount", {
       min: 0,
       max: 10,
@@ -342,10 +426,10 @@ function setupTweakpane(textureLoader) {
       smokeAmountUniform.value = ev.value
     })
 
-  pane
+  atmosphereFolder
     .addBinding(params, "bloomIntensity", {
       min: 0,
-      max: 1,
+      max: 1.5,
       step: 0.02,
       label: "Bloom"
     })
