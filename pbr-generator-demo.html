@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PBR Texture Generator Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    h1 { margin-bottom: 20px; }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .input-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #16213e;
+      border-radius: 10px;
+    }
+    .input-section input[type="file"] {
+      padding: 10px;
+      background: #0f3460;
+      border: none;
+      border-radius: 5px;
+      color: #eee;
+      cursor: pointer;
+    }
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+    }
+    .preview-card {
+      background: #16213e;
+      border-radius: 10px;
+      padding: 15px;
+      text-align: center;
+    }
+    .preview-card h3 {
+      margin-bottom: 10px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #e94560;
+    }
+    .preview-card canvas {
+      max-width: 100%;
+      height: auto;
+      border-radius: 5px;
+      background: #0f0f0f;
+    }
+    .preview-card button {
+      margin-top: 10px;
+      padding: 8px 16px;
+      background: #e94560;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .preview-card button:hover {
+      background: #ff6b6b;
+    }
+    #three-preview {
+      width: 100%;
+      height: 400px;
+      border-radius: 10px;
+      margin-top: 30px;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PBR Texture Generator Demo</h1>
+
+    <div class="input-section">
+      <input type="file" id="imageInput" accept="image/*">
+      <span style="margin-left: 15px; color: #888;">Upload a diffuse/albedo texture to generate PBR maps</span>
+    </div>
+
+    <div class="preview-grid" id="previewGrid">
+      <div class="loading">Upload an image to see generated PBR maps</div>
+    </div>
+
+    <canvas id="three-preview"></canvas>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.182.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.182.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+
+    // Import PBR generator functions directly (standalone mode)
+    import {
+      generateNormalMapCanvas,
+      generateRoughnessMapCanvas,
+      generateMetallicMapCanvas,
+      generateHeightMapCanvas,
+      generateAOMapCanvas,
+      generatePBRMaps
+    } from './src/utils/PBRTextureGenerator.js'
+
+    // Three.js scene setup for preview
+    let scene, camera, renderer, controls, mesh
+
+    function initThreeJS() {
+      const canvas = document.getElementById('three-preview')
+
+      scene = new THREE.Scene()
+      scene.background = new THREE.Color(0x1a1a2e)
+
+      camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 100)
+      camera.position.set(0, 0, 3)
+
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
+      renderer.setSize(canvas.clientWidth, canvas.clientHeight)
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+
+      controls = new OrbitControls(camera, canvas)
+      controls.enableDamping = true
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.3)
+      scene.add(ambientLight)
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1)
+      directionalLight.position.set(5, 5, 5)
+      scene.add(directionalLight)
+
+      const directionalLight2 = new THREE.DirectionalLight(0x4488ff, 0.5)
+      directionalLight2.position.set(-5, 3, -5)
+      scene.add(directionalLight2)
+
+      // Create sphere with placeholder material
+      const geometry = new THREE.SphereGeometry(1, 64, 64)
+      const material = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.5,
+        metalness: 0.0,
+      })
+      mesh = new THREE.Mesh(geometry, material)
+      scene.add(mesh)
+
+      function animate() {
+        requestAnimationFrame(animate)
+        controls.update()
+        mesh.rotation.y += 0.003
+        renderer.render(scene, camera)
+      }
+      animate()
+
+      window.addEventListener('resize', () => {
+        camera.aspect = canvas.clientWidth / canvas.clientHeight
+        camera.updateProjectionMatrix()
+        renderer.setSize(canvas.clientWidth, canvas.clientHeight)
+      })
+    }
+
+    function createPreviewCard(title, canvas, downloadName) {
+      const card = document.createElement('div')
+      card.className = 'preview-card'
+
+      const h3 = document.createElement('h3')
+      h3.textContent = title
+
+      const button = document.createElement('button')
+      button.textContent = 'Download'
+      button.onclick = () => {
+        const link = document.createElement('a')
+        link.download = downloadName
+        link.href = canvas.toDataURL('image/png')
+        link.click()
+      }
+
+      card.appendChild(h3)
+      card.appendChild(canvas)
+      card.appendChild(button)
+
+      return card
+    }
+
+    function processImage(image) {
+      const grid = document.getElementById('previewGrid')
+      grid.innerHTML = ''
+
+      // Generate all maps
+      console.time('PBR Generation')
+      const maps = generatePBRMaps(image, {
+        normal: { strength: 2.0, blur: 0 },
+        roughness: { contrast: 1.0, brightness: 0, invert: true, blur: 0 },
+        metallic: { threshold: 0.5, contrast: 1.5, blur: 1 },
+        height: { contrast: 1.0, blur: 1 },
+        ao: { strength: 1.0, radius: 5 }
+      })
+      console.timeEnd('PBR Generation')
+
+      // Create diffuse preview
+      const diffuseCanvas = document.createElement('canvas')
+      diffuseCanvas.width = image.width
+      diffuseCanvas.height = image.height
+      const ctx = diffuseCanvas.getContext('2d')
+      ctx.drawImage(image, 0, 0)
+
+      // Add preview cards
+      grid.appendChild(createPreviewCard('Diffuse (Original)', diffuseCanvas, 'diffuse.png'))
+      grid.appendChild(createPreviewCard('Normal Map', maps.normal, 'normal.png'))
+      grid.appendChild(createPreviewCard('Roughness Map', maps.roughness, 'roughness.png'))
+      grid.appendChild(createPreviewCard('Metallic Map', maps.metallic, 'metallic.png'))
+      grid.appendChild(createPreviewCard('Height Map', maps.height, 'height.png'))
+      grid.appendChild(createPreviewCard('Ambient Occlusion', maps.ao, 'ao.png'))
+
+      // Update Three.js preview
+      if (mesh) {
+        const textureFromCanvas = (canvas) => {
+          const texture = new THREE.CanvasTexture(canvas)
+          texture.colorSpace = THREE.LinearSRGBColorSpace
+          texture.needsUpdate = true
+          return texture
+        }
+
+        mesh.material.map = textureFromCanvas(diffuseCanvas)
+        mesh.material.map.colorSpace = THREE.SRGBColorSpace
+        mesh.material.normalMap = textureFromCanvas(maps.normal)
+        mesh.material.roughnessMap = textureFromCanvas(maps.roughness)
+        mesh.material.metalnessMap = textureFromCanvas(maps.metallic)
+        mesh.material.aoMap = textureFromCanvas(maps.ao)
+        mesh.material.needsUpdate = true
+      }
+    }
+
+    // Initialize
+    initThreeJS()
+
+    // Handle file input
+    document.getElementById('imageInput').addEventListener('change', (e) => {
+      const file = e.target.files[0]
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const image = new Image()
+        image.onload = () => processImage(image)
+        image.src = event.target.result
+      }
+      reader.readAsDataURL(file)
+    })
+  </script>
+</body>
+</html>
