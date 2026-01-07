@@ -23,6 +23,7 @@ import { bloom } from "three/examples/jsm/tsl/display/BloomNode.js"
 import { Pane } from "tweakpane"
 import { HandTrackingController } from "./utils/HandTrackingController.js"
 import { ParameterMapper } from "./utils/ParameterMapper.js"
+import { glassParams, glassUniforms, setupGlassPane, getParamConfigs } from "./glassParams.js"
 
 let camera, scene, renderer, controls
 let pane = null
@@ -31,6 +32,7 @@ let parameterMapper = null
 let postProcessing
 let glassPanel, glassMaterial
 let spotLight
+let volumetricMesh
 
 const LAYER_VOLUMETRIC_LIGHTING = 10
 
@@ -62,21 +64,12 @@ const params = {
   // Fog & Bloom
   smokeAmount: 4,
   bloomIntensity: 0.3,
-  // Caustics
-  causticIntensity: 50,
-  causticScale: 0.6,
-  chromaticAberration: 0.004,
-  causticOcclusion: 1.0,
-  refractionStrength: 0.6,
-  // Glass
-  glassIOR: 1.5,
-  glassEmissive: 0.15,
-  normalStrength: 1.0
+  fogBoundsX: 4,
+  fogBoundsY: 1.5,
+  fogBoundsZ: 4
 }
 
-let smokeAmountUniform, volumetricLightingIntensity, causticIntensityUniform
-let causticScaleUniform, chromaticAberrationUniform, causticOcclusionUniform
-let refractionStrengthUniform, glassIORUniform, glassEmissiveUniform
+let smokeAmountUniform, volumetricLightingIntensity
 let stainedGlassTexture, normalMapTexture
 let textureLoader
 
@@ -138,14 +131,7 @@ async function init() {
   scene.add(spotLight.target)
 
   // Uniforms for dynamic control
-  causticIntensityUniform = uniform(params.causticIntensity)
   smokeAmountUniform = uniform(params.smokeAmount)
-  causticScaleUniform = uniform(params.causticScale)
-  chromaticAberrationUniform = uniform(params.chromaticAberration)
-  causticOcclusionUniform = uniform(params.causticOcclusion)
-  refractionStrengthUniform = uniform(params.refractionStrength)
-  glassIORUniform = uniform(params.glassIOR)
-  glassEmissiveUniform = uniform(params.glassEmissive)
 
   // TSL Caustic shader - projects stained glass colors onto shadows
   // Uses caustic map + refraction + chromatic aberration like official example
@@ -154,24 +140,24 @@ async function init() {
     const refractionVector = refract(
       positionViewDirection.negate(),
       normalView,
-      div(1.0, glassIORUniform)
+      div(1.0, glassUniforms.causticIOR)
     ).normalize()
 
     // Edge falloff based on UV distance from center (works for flat surfaces)
     // Creates vignette-like effect where caustics fade toward edges
     const uvCentered = uv().sub(0.5).mul(2.0) // -1 to 1
     const distFromCenter = uvCentered.length() // 0 at center, ~1.4 at corners
-    const edgeFalloff = distFromCenter.mul(causticOcclusionUniform.mul(0.1)).clamp(0, 1)
+    const edgeFalloff = distFromCenter.mul(glassUniforms.causticOcclusion.mul(0.1)).clamp(0, 1)
     const viewZ = edgeFalloff.oneMinus() // 1 at center, falls off toward edges
 
     // UV for caustic pattern - use refraction to create wavy projection
-    const causticUV = refractionVector.xy.mul(causticScaleUniform)
+    const causticUV = refractionVector.xy.mul(glassUniforms.causticScale)
 
     // Chromatic aberration offset for rainbow edges
     const chromaticOffset = normalView.z
       .abs()
       .pow(-0.9)
-      .mul(chromaticAberrationUniform)
+      .mul(glassUniforms.chromaticAberration)
 
     // Sample caustic map with chromatic aberration (like official example)
     const causticPattern = vec3(
@@ -189,7 +175,7 @@ async function init() {
 
     // Combine: caustic pattern * glass color * intensity + base glow
     return causticPattern
-      .mul(viewZ.mul(causticIntensityUniform))
+      .mul(viewZ.mul(glassUniforms.causticIntensity))
       .add(viewZ)
       .mul(glassColor)
       .mul(fogAttenuation)
@@ -199,17 +185,34 @@ async function init() {
   glassMaterial = new THREE.MeshPhysicalNodeMaterial()
   glassMaterial.side = THREE.DoubleSide
   glassMaterial.transparent = true
-  glassMaterial.transmission = 0.9
-  glassMaterial.thickness = 0.05
-  glassMaterial.ior = 1.5
-  glassMaterial.metalness = 0
-  glassMaterial.roughness = 0.05
+  glassMaterial.transmission = glassParams.transmission
+  glassMaterial.thickness = glassParams.thickness
+  glassMaterial.ior = glassParams.ior
+  glassMaterial.metalness = glassParams.metalness
+  glassMaterial.roughness = glassParams.roughness
   glassMaterial.map = stainedGlassTexture
+
+  // Physical material extras
+  glassMaterial.clearcoat = glassParams.clearcoat
+  glassMaterial.clearcoatRoughness = glassParams.clearcoatRoughness
+  glassMaterial.sheen = glassParams.sheen
+  glassMaterial.sheenRoughness = glassParams.sheenRoughness
+  glassMaterial.sheenColor = new THREE.Color(glassParams.sheenColor)
+  glassMaterial.iridescence = glassParams.iridescence
+  glassMaterial.iridescenceIOR = glassParams.iridescenceIOR
+  glassMaterial.iridescenceThicknessRange = [glassParams.iridescenceThicknessMin, glassParams.iridescenceThicknessMax]
+  glassMaterial.specularIntensity = glassParams.specularIntensity
+  glassMaterial.specularColor = new THREE.Color(glassParams.specularColor)
+  glassMaterial.attenuationColor = new THREE.Color(glassParams.attenuationColor)
+  glassMaterial.attenuationDistance = glassParams.attenuationDistance
+  glassMaterial.dispersion = glassParams.dispersion
+  glassMaterial.anisotropy = glassParams.anisotropy
+  glassMaterial.anisotropyRotation = glassParams.anisotropyRotation
 
   // Apply normal map if available
   if (normalMapTexture) {
     glassMaterial.normalMap = normalMapTexture
-    glassMaterial.normalScale = new THREE.Vector2(params.normalStrength, params.normalStrength)
+    glassMaterial.normalScale = new THREE.Vector2(glassParams.normalStrength, glassParams.normalStrength)
   }
 
   // This is the key - castShadowNode projects the colors through the shadow
@@ -217,7 +220,7 @@ async function init() {
 
   // Emissive glow to see the texture on the panel itself
   glassMaterial.emissiveNode = Fn(() => {
-    return texture(stainedGlassTexture, uv()).rgb.mul(glassEmissiveUniform)
+    return texture(stainedGlassTexture, uv()).rgb.mul(glassUniforms.glassEmissive)
   })()
 
   // Glass panel - horizontal, between light and ground
@@ -315,12 +318,12 @@ async function init() {
   })
 
   // Volumetric fog box - covers the space between glass and ground
-  const volumetricMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(2, 1, 2),
+  volumetricMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(params.fogBoundsX, params.fogBoundsY, params.fogBoundsZ),
     volumetricMaterial
   )
   volumetricMesh.receiveShadow = true
-  volumetricMesh.position.y = 0.5 // Centered between ground (0) and glass (1)
+  volumetricMesh.position.y = params.fogBoundsY / 2 // Centered above ground
   volumetricMesh.layers.disableAll()
   volumetricMesh.layers.enable(LAYER_VOLUMETRIC_LIGHTING)
   scene.add(volumetricMesh)
@@ -402,7 +405,7 @@ function setupTweakpane() {
           normalMapTexture = newNormal
         }
         glassMaterial.normalMap = normalMapTexture
-        glassMaterial.normalScale.set(params.normalStrength, params.normalStrength)
+        glassMaterial.normalScale.set(glassParams.normalStrength, glassParams.normalStrength)
       } else {
         // Remove normal map if this set doesn't have one
         glassMaterial.normalMap = null
@@ -412,90 +415,8 @@ function setupTweakpane() {
       glassMaterial.needsUpdate = true
     })
 
-  // Caustics folder
-  const causticsFolder = pane.addFolder({ title: "Caustics" })
-
-  causticsFolder
-    .addBinding(params, "causticIntensity", {
-      min: 1,
-      max: 150,
-      step: 1,
-      label: "Intensity"
-    })
-    .on("change", (ev) => {
-      causticIntensityUniform.value = ev.value
-    })
-
-  causticsFolder
-    .addBinding(params, "causticScale", {
-      min: 0.1,
-      max: 2.0,
-      step: 0.05,
-      label: "Pattern Scale"
-    })
-    .on("change", (ev) => {
-      causticScaleUniform.value = ev.value
-    })
-
-  causticsFolder
-    .addBinding(params, "chromaticAberration", {
-      min: 0,
-      max: 0.02,
-      step: 0.001,
-      label: "Chromatic"
-    })
-    .on("change", (ev) => {
-      chromaticAberrationUniform.value = ev.value
-    })
-
-  causticsFolder
-    .addBinding(params, "causticOcclusion", {
-      min: 0,
-      max: 20,
-      step: 0.1,
-      label: "Occlusion"
-    })
-    .on("change", (ev) => {
-      causticOcclusionUniform.value = ev.value
-    })
-
-  // Glass folder
-  const glassFolder = pane.addFolder({ title: "Glass" })
-
-  glassFolder
-    .addBinding(params, "glassIOR", {
-      min: 0.05,
-      max: 2.5,
-      step: 0.01,
-      label: "IOR"
-    })
-    .on("change", (ev) => {
-      glassIORUniform.value = ev.value
-    })
-
-  glassFolder
-    .addBinding(params, "glassEmissive", {
-      min: 0,
-      max: 1,
-      step: 0.05,
-      label: "Emissive"
-    })
-    .on("change", (ev) => {
-      glassEmissiveUniform.value = ev.value
-    })
-
-  glassFolder
-    .addBinding(params, "normalStrength", {
-      min: 0,
-      max: 3,
-      step: 0.1,
-      label: "Normal"
-    })
-    .on("change", (ev) => {
-      if (glassMaterial.normalMap) {
-        glassMaterial.normalScale.set(ev.value, ev.value)
-      }
-    })
+  // Glass parameters from separate module
+  setupGlassPane(pane, glassMaterial)
 
   // Atmosphere folder
   const atmosphereFolder = pane.addFolder({ title: "Atmosphere" })
@@ -521,6 +442,44 @@ function setupTweakpane() {
     .on("change", (ev) => {
       volumetricLightingIntensity.value = ev.value
     })
+
+  // Helper to recreate fog bounds geometry
+  const updateFogBounds = () => {
+    volumetricMesh.geometry.dispose()
+    volumetricMesh.geometry = new THREE.BoxGeometry(
+      params.fogBoundsX,
+      params.fogBoundsY,
+      params.fogBoundsZ
+    )
+    volumetricMesh.position.y = params.fogBoundsY / 2
+  }
+
+  atmosphereFolder
+    .addBinding(params, "fogBoundsX", {
+      min: 1,
+      max: 10,
+      step: 0.5,
+      label: "Bounds X"
+    })
+    .on("change", updateFogBounds)
+
+  atmosphereFolder
+    .addBinding(params, "fogBoundsY", {
+      min: 0.5,
+      max: 5,
+      step: 0.25,
+      label: "Bounds Y"
+    })
+    .on("change", updateFogBounds)
+
+  atmosphereFolder
+    .addBinding(params, "fogBoundsZ", {
+      min: 1,
+      max: 10,
+      step: 0.5,
+      label: "Bounds Z"
+    })
+    .on("change", updateFogBounds)
 
   // Hand Tracking folder
   const handFolder = pane.addFolder({ title: "Hand Tracking", expanded: false })

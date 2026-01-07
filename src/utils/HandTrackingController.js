@@ -9,10 +9,11 @@ const DEFAULT_CONFIG = {
   numHands: 1,
   minDetectionConfidence: 0.5,
   minTrackingConfidence: 0.5,
-  modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-  wasmPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm',
+  modelAssetPath:
+    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+  wasmPath: "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
   landmark: 9, // Palm center (MIDDLE_FINGER_MCP)
-  smoothing: 0.25, // Exponential smoothing factor (lower = smoother)
+  smoothing: 0.25 // Exponential smoothing factor (lower = smoother)
 }
 
 // Landmark indices reference:
@@ -33,22 +34,26 @@ export class HandTrackingController {
 
   async init(videoElement) {
     // Dynamic import of MediaPipe Tasks Vision
-    const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest')
+    const vision = await import(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest"
+    )
     const { FilesetResolver, HandLandmarker } = vision
 
     // Initialize vision WASM
-    const wasmFileset = await FilesetResolver.forVisionTasks(this.config.wasmPath)
+    const wasmFileset = await FilesetResolver.forVisionTasks(
+      this.config.wasmPath
+    )
 
     // Create Hand Landmarker
     this.handLandmarker = await HandLandmarker.createFromOptions(wasmFileset, {
       baseOptions: {
         modelAssetPath: this.config.modelAssetPath,
-        delegate: 'GPU'
+        delegate: "GPU"
       },
       numHands: this.config.numHands,
-      runningMode: 'VIDEO',
+      runningMode: "VIDEO",
       minHandDetectionConfidence: this.config.minDetectionConfidence,
-      minHandPresenceConfidence: this.config.minTrackingConfidence,
+      minHandPresenceConfidence: this.config.minTrackingConfidence
     })
 
     this.video = videoElement
@@ -57,10 +62,10 @@ export class HandTrackingController {
 
   async startCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: 640, height: 480 }
+      video: { facingMode: "user", width: 640, height: 480 }
     })
     this.video.srcObject = stream
-    await new Promise(resolve => {
+    await new Promise((resolve) => {
       this.video.onloadedmetadata = resolve
     })
     await this.video.play()
@@ -108,8 +113,10 @@ export class HandTrackingController {
 
         // Apply exponential smoothing
         const alpha = this.config.smoothing
-        this.smoothedPosition.x = alpha * rawX + (1 - alpha) * this.smoothedPosition.x
-        this.smoothedPosition.y = alpha * rawY + (1 - alpha) * this.smoothedPosition.y
+        this.smoothedPosition.x =
+          alpha * rawX + (1 - alpha) * this.smoothedPosition.x
+        this.smoothedPosition.y =
+          alpha * rawY + (1 - alpha) * this.smoothedPosition.y
 
         this.isHandDetected = true
         this._notifyCallbacks()
@@ -118,7 +125,7 @@ export class HandTrackingController {
         this._notifyCallbacks()
       }
     } catch (error) {
-      console.warn('Hand detection error:', error)
+      console.warn("Hand detection error:", error)
     }
 
     requestAnimationFrame(() => this._processFrame())
@@ -126,7 +133,7 @@ export class HandTrackingController {
 
   _notifyCallbacks() {
     const position = this.getPosition()
-    this.callbacks.forEach(cb => cb(position, this.isHandDetected))
+    this.callbacks.forEach((cb) => cb(position, this.isHandDetected))
   }
 
   getPosition() {
@@ -136,7 +143,7 @@ export class HandTrackingController {
   dispose() {
     this.stop()
     if (this.video?.srcObject) {
-      this.video.srcObject.getTracks().forEach(track => track.stop())
+      this.video.srcObject.getTracks().forEach((track) => track.stop())
     }
     if (this.handLandmarker) {
       this.handLandmarker.close()
