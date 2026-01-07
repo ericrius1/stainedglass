@@ -491,14 +491,11 @@ function setupTweakpane() {
     yParam: "bloomIntensity"
   }
 
-  // Parameter configs for axis mapping
+  // Parameter configs for axis mapping (combine glass params with local ones)
   const paramConfigs = {
-    causticScale: { min: 0.1, max: 2.0, uniform: causticScaleUniform },
-    chromaticAberration: { min: 0, max: 0.02, uniform: chromaticAberrationUniform },
-    glassIOR: { min: 0.05, max: 2.5, uniform: glassIORUniform },
+    ...getParamConfigs(),
     bloomIntensity: { min: 0, max: 1.5, uniform: volumetricLightingIntensity },
-    smokeAmount: { min: 0, max: 10, uniform: smokeAmountUniform },
-    glassEmissive: { min: 0, max: 1, uniform: glassEmissiveUniform }
+    smokeAmount: { min: 0, max: 10, uniform: smokeAmountUniform }
   }
 
   handFolder
@@ -529,7 +526,7 @@ function setupTweakpane() {
       options: {
         "Pattern Scale": "causticScale",
         Chromatic: "chromaticAberration",
-        "Glass IOR": "glassIOR"
+        "Caustic IOR": "causticIOR"
       }
     })
     .on("change", (ev) => {
@@ -571,14 +568,14 @@ async function initHandTracking() {
 
     // Create parameter mapper
     parameterMapper = new ParameterMapper()
-    parameterMapper.init(params, pane)
+    parameterMapper.init(glassParams, pane)
 
     // Configure default mappings
     parameterMapper.addMapping("causticScale", {
       axis: "x",
-      min: 0.1,
-      max: 2.0,
-      uniform: causticScaleUniform
+      min: 0.05,
+      max: 3.0,
+      uniform: glassUniforms.causticScale
     })
 
     parameterMapper.addMapping("bloomIntensity", {
