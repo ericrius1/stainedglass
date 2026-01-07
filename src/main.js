@@ -29,10 +29,23 @@ let spotLight
 
 const LAYER_VOLUMETRIC_LIGHTING = 10
 
-const texturePaths = {
-  "Solar Windmill": "/textures/stainedglass/solarwindmill2.png",
-  Tree: "/textures/stainedglass/tree.png",
-  Waterfalls: "/textures/stainedglass/waterfalls.jpg"
+// Texture set configuration
+// Each set can have: diffuse, normal, roughness, metallic, ao, height, emissive
+// Add new texture sets here - system auto-detects available maps
+const textureSets = {
+  "Solar Windmill": {
+    diffuse: "/textures/stainedglass/solarwindmill2.png"
+  },
+  Tree: {
+    diffuse: "/textures/stainedglass/tree.png"
+  },
+  Waterfalls: {
+    diffuse: "/textures/stainedglass/waterfalls.jpg"
+  },
+  Eagle: {
+    diffuse: "/textures/stainedglass/eagle/eagle_diffuse.jpg",
+    normal: "/textures/stainedglass/eagle/eagle_normal.jpg"
+  }
 }
 
 // Get initial texture from URL or default
@@ -58,7 +71,8 @@ const params = {
 let smokeAmountUniform, volumetricLightingIntensity, causticIntensityUniform
 let causticScaleUniform, chromaticAberrationUniform, causticOcclusionUniform
 let refractionStrengthUniform, glassIORUniform, glassEmissiveUniform
-let stainedGlassTexture
+let stainedGlassTexture, normalMapTexture
+let textureLoader
 
 init()
 
@@ -76,15 +90,21 @@ async function init() {
   scene.background = new THREE.Color(0x050508)
 
   // Load textures
-  const textureLoader = new THREE.TextureLoader()
+  textureLoader = new THREE.TextureLoader()
 
-  // Stained glass texture for colors
-  stainedGlassTexture = await textureLoader.loadAsync(
-    texturePaths[params.texture]
-  )
+  // Load initial texture set
+  const initialSet = textureSets[params.texture]
+
+  // Stained glass diffuse texture for colors
+  stainedGlassTexture = await textureLoader.loadAsync(initialSet.diffuse)
   stainedGlassTexture.colorSpace = THREE.SRGBColorSpace
-  stainedGlassTexture.wrapS = stainedGlassTexture.wrapT =
-    THREE.ClampToEdgeWrapping
+  stainedGlassTexture.wrapS = stainedGlassTexture.wrapT = THREE.ClampToEdgeWrapping
+
+  // Load normal map if available
+  if (initialSet.normal) {
+    normalMapTexture = await textureLoader.loadAsync(initialSet.normal)
+    normalMapTexture.wrapS = normalMapTexture.wrapT = THREE.ClampToEdgeWrapping
+  }
 
   // Caustic pattern texture for light refraction pattern
   const causticMap = await textureLoader.loadAsync("/textures/caustic.jpg")
@@ -179,6 +199,12 @@ async function init() {
   glassMaterial.metalness = 0
   glassMaterial.roughness = 0.05
   glassMaterial.map = stainedGlassTexture
+
+  // Apply normal map if available
+  if (normalMapTexture) {
+    glassMaterial.normalMap = normalMapTexture
+    glassMaterial.normalScale = new THREE.Vector2(1, 1)
+  }
 
   // This is the key - castShadowNode projects the colors through the shadow
   glassMaterial.castShadowNode = causticEffect
@@ -322,28 +348,59 @@ async function init() {
   controls.update()
 
   // Tweakpane
-  setupTweakpane(textureLoader)
+  setupTweakpane()
 
   window.addEventListener("resize", onWindowResize)
 }
 
-function setupTweakpane(textureLoader) {
+function setupTweakpane() {
   const pane = new Pane({ title: "Stained Glass" })
+
+  // Build texture options from texture sets
+  const textureOptions = Object.keys(textureSets).reduce((acc, key) => {
+    acc[key] = key
+    return acc
+  }, {})
 
   // Texture selection - swap texture without reloading
   pane
-    .addBinding(params, "texture", {
-      options: {
-        "Solar Windmill": "Solar Windmill",
-        Tree: "Tree",
-        Waterfalls: "Waterfalls"
-      }
-    })
+    .addBinding(params, "texture", { options: textureOptions })
     .on("change", async (ev) => {
-      // Load new texture image into existing texture object
-      const newImage = await new THREE.ImageLoader().loadAsync(texturePaths[ev.value])
-      stainedGlassTexture.image = newImage
+      const set = textureSets[ev.value]
+
+      // Load new diffuse texture using TextureLoader (not ImageLoader!)
+      const newDiffuse = await textureLoader.loadAsync(set.diffuse)
+      newDiffuse.colorSpace = THREE.SRGBColorSpace
+      newDiffuse.wrapS = newDiffuse.wrapT = THREE.ClampToEdgeWrapping
+
+      // Update the existing texture's source (key for WebGPU)
+      stainedGlassTexture.source = newDiffuse.source
       stainedGlassTexture.needsUpdate = true
+
+      // Also update material map reference
+      glassMaterial.map = stainedGlassTexture
+      glassMaterial.needsUpdate = true
+
+      // Handle normal map
+      if (set.normal) {
+        const newNormal = await textureLoader.loadAsync(set.normal)
+        newNormal.wrapS = newNormal.wrapT = THREE.ClampToEdgeWrapping
+
+        if (normalMapTexture) {
+          normalMapTexture.source = newNormal.source
+          normalMapTexture.needsUpdate = true
+        } else {
+          normalMapTexture = newNormal
+        }
+        glassMaterial.normalMap = normalMapTexture
+        glassMaterial.normalScale = new THREE.Vector2(1, 1)
+      } else {
+        // Remove normal map if this set doesn't have one
+        glassMaterial.normalMap = null
+        normalMapTexture = null
+      }
+
+      glassMaterial.needsUpdate = true
     })
 
   // Caustics folder
