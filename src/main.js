@@ -23,7 +23,12 @@ import { bloom } from "three/examples/jsm/tsl/display/BloomNode.js"
 import { Pane } from "tweakpane"
 import { HandTrackingController } from "./utils/HandTrackingController.js"
 import { ParameterMapper } from "./utils/ParameterMapper.js"
-import { glassParams, glassUniforms, setupGlassPane, getParamConfigs } from "./glassParams.js"
+import {
+  glassParams,
+  glassUniforms,
+  setupGlassPane,
+  getParamConfigs
+} from "./glassParams.js"
 
 let camera, scene, renderer, controls
 let pane = null
@@ -97,7 +102,8 @@ async function init() {
   // Stained glass diffuse texture for colors
   stainedGlassTexture = await textureLoader.loadAsync(initialSet.diffuse)
   stainedGlassTexture.colorSpace = THREE.SRGBColorSpace
-  stainedGlassTexture.wrapS = stainedGlassTexture.wrapT = THREE.ClampToEdgeWrapping
+  stainedGlassTexture.wrapS = stainedGlassTexture.wrapT =
+    THREE.ClampToEdgeWrapping
 
   // Load normal map if available
   if (initialSet.normal) {
@@ -147,7 +153,9 @@ async function init() {
     // Creates vignette-like effect where caustics fade toward edges
     const uvCentered = uv().sub(0.5).mul(2.0) // -1 to 1
     const distFromCenter = uvCentered.length() // 0 at center, ~1.4 at corners
-    const edgeFalloff = distFromCenter.mul(glassUniforms.causticOcclusion.mul(0.1)).clamp(0, 1)
+    const edgeFalloff = distFromCenter
+      .mul(glassUniforms.causticOcclusion.mul(0.1))
+      .clamp(0, 1)
     const viewZ = edgeFalloff.oneMinus() // 1 at center, falls off toward edges
 
     // UV for caustic pattern - use refraction to create wavy projection
@@ -200,7 +208,10 @@ async function init() {
   glassMaterial.sheenColor = new THREE.Color(glassParams.sheenColor)
   glassMaterial.iridescence = glassParams.iridescence
   glassMaterial.iridescenceIOR = glassParams.iridescenceIOR
-  glassMaterial.iridescenceThicknessRange = [glassParams.iridescenceThicknessMin, glassParams.iridescenceThicknessMax]
+  glassMaterial.iridescenceThicknessRange = [
+    glassParams.iridescenceThicknessMin,
+    glassParams.iridescenceThicknessMax
+  ]
   glassMaterial.specularIntensity = glassParams.specularIntensity
   glassMaterial.specularColor = new THREE.Color(glassParams.specularColor)
   glassMaterial.attenuationColor = new THREE.Color(glassParams.attenuationColor)
@@ -212,7 +223,10 @@ async function init() {
   // Apply normal map if available
   if (normalMapTexture) {
     glassMaterial.normalMap = normalMapTexture
-    glassMaterial.normalScale = new THREE.Vector2(glassParams.normalStrength, glassParams.normalStrength)
+    glassMaterial.normalScale = new THREE.Vector2(
+      glassParams.normalStrength,
+      glassParams.normalStrength
+    )
   }
 
   // This is the key - castShadowNode projects the colors through the shadow
@@ -220,7 +234,9 @@ async function init() {
 
   // Emissive glow to see the texture on the panel itself
   glassMaterial.emissiveNode = Fn(() => {
-    return texture(stainedGlassTexture, uv()).rgb.mul(glassUniforms.glassEmissive)
+    return texture(stainedGlassTexture, uv()).rgb.mul(
+      glassUniforms.glassEmissive
+    )
   })()
 
   // Glass panel - horizontal, between light and ground
@@ -232,7 +248,7 @@ async function init() {
   scene.add(glassPanel)
 
   // Ground plane to receive the colored caustic shadows
-  const groundGeometry = new THREE.PlaneGeometry(4, 4)
+  const groundGeometry = new THREE.PlaneGeometry(0.4, 0.4)
   const groundMaterial = new THREE.MeshStandardMaterial({
     color: 0x111111,
     roughness: 0.8,
@@ -319,10 +335,14 @@ async function init() {
 
   // Volumetric fog box - covers the space between glass and ground
   volumetricMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(params.fogBoundsX, params.fogBoundsY, params.fogBoundsZ),
+    new THREE.BoxGeometry(
+      params.fogBoundsX,
+      params.fogBoundsY,
+      params.fogBoundsZ
+    ),
     volumetricMaterial
   )
-  volumetricMesh.receiveShadow = true
+  volumetricMesh.receiveShadow = false
   volumetricMesh.position.y = params.fogBoundsY / 2 // Centered above ground
   volumetricMesh.layers.disableAll()
   volumetricMesh.layers.enable(LAYER_VOLUMETRIC_LIGHTING)
@@ -368,6 +388,10 @@ async function init() {
 function setupTweakpane() {
   pane = new Pane({ title: "Stained Glass" })
 
+  // Enable scrolling on the pane
+  pane.element.style.maxHeight = "90vh"
+  pane.element.style.overflowY = "auto"
+
   // Build texture options from texture sets
   const textureOptions = Object.keys(textureSets).reduce((acc, key) => {
     acc[key] = key
@@ -405,7 +429,10 @@ function setupTweakpane() {
           normalMapTexture = newNormal
         }
         glassMaterial.normalMap = normalMapTexture
-        glassMaterial.normalScale.set(glassParams.normalStrength, glassParams.normalStrength)
+        glassMaterial.normalScale.set(
+          glassParams.normalStrength,
+          glassParams.normalStrength
+        )
       } else {
         // Remove normal map if this set doesn't have one
         glassMaterial.normalMap = null
@@ -517,7 +544,9 @@ function setupTweakpane() {
   handFolder
     .addBinding(handState, "showVideo", { label: "Show Video" })
     .on("change", (ev) => {
-      document.getElementById("hand-video").style.display = ev.value ? "block" : "none"
+      document.getElementById("hand-video").style.display = ev.value
+        ? "block"
+        : "none"
     })
 
   handFolder
@@ -592,7 +621,9 @@ async function initHandTracking() {
     // Subscribe to position changes
     handController.onPositionChange((position, isDetected) => {
       if (statusElement) {
-        statusElement.textContent = `Hand: ${isDetected ? "Detected" : "Not Detected"}`
+        statusElement.textContent = `Hand: ${
+          isDetected ? "Detected" : "Not Detected"
+        }`
         statusElement.className = isDetected ? "detected" : "not-detected"
       }
 
