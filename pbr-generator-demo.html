@@ -19,7 +19,7 @@
       margin: 0 auto;
     }
     .input-section {
-      margin-bottom: 30px;
+      margin-bottom: 20px;
       padding: 20px;
       background: #16213e;
       border-radius: 10px;
@@ -31,6 +31,95 @@
       border-radius: 5px;
       color: #eee;
       cursor: pointer;
+    }
+    .export-section {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #16213e;
+      border-radius: 10px;
+      display: none;
+    }
+    .export-section.visible {
+      display: block;
+    }
+    .export-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+    }
+    .export-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .export-group label {
+      font-size: 14px;
+      color: #aaa;
+    }
+    .export-group input[type="text"] {
+      padding: 8px 12px;
+      background: #0f3460;
+      border: 1px solid #1a4a7a;
+      border-radius: 5px;
+      color: #eee;
+      width: 150px;
+    }
+    .export-group input[type="range"] {
+      width: 100px;
+      accent-color: #e94560;
+    }
+    .export-group select {
+      padding: 8px 12px;
+      background: #0f3460;
+      border: 1px solid #1a4a7a;
+      border-radius: 5px;
+      color: #eee;
+      cursor: pointer;
+    }
+    .toggle-group {
+      display: flex;
+      background: #0f3460;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .toggle-group button {
+      padding: 8px 16px;
+      background: transparent;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .toggle-group button.active {
+      background: #e94560;
+      color: white;
+    }
+    .download-all-btn {
+      padding: 12px 24px;
+      background: #e94560;
+      border: none;
+      border-radius: 5px;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .download-all-btn:hover {
+      background: #ff6b6b;
+    }
+    .download-all-btn:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+    .file-size-info {
+      font-size: 12px;
+      color: #888;
+      margin-top: 10px;
     }
     .preview-grid {
       display: grid;
@@ -56,8 +145,17 @@
       border-radius: 5px;
       background: #0f0f0f;
     }
-    .preview-card button {
+    .preview-card .card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       margin-top: 10px;
+    }
+    .preview-card .file-size {
+      font-size: 11px;
+      color: #888;
+    }
+    .preview-card button {
       padding: 8px 16px;
       background: #e94560;
       border: none;
@@ -80,6 +178,23 @@
       padding: 40px;
       color: #888;
     }
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+    .checkbox-group label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .checkbox-group input[type="checkbox"] {
+      accent-color: #e94560;
+      width: 16px;
+      height: 16px;
+    }
   </style>
 </head>
 <body>
@@ -91,12 +206,63 @@
       <span style="margin-left: 15px; color: #888;">Upload a diffuse/albedo texture to generate PBR maps</span>
     </div>
 
+    <div class="export-section" id="exportSection">
+      <div class="export-row">
+        <div class="export-group">
+          <label>Prefix:</label>
+          <input type="text" id="filePrefix" value="texture" placeholder="texture">
+        </div>
+
+        <div class="export-group">
+          <label>Format:</label>
+          <div class="toggle-group">
+            <button id="btnPNG" class="active">PNG</button>
+            <button id="btnJPG">JPG</button>
+          </div>
+        </div>
+
+        <div class="export-group" id="qualityGroup" style="display: none;">
+          <label>Quality:</label>
+          <input type="range" id="jpgQuality" min="10" max="100" value="85">
+          <span id="qualityValue">85%</span>
+        </div>
+
+        <button class="download-all-btn" id="downloadAllBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download All as ZIP
+        </button>
+      </div>
+
+      <div class="export-row" style="margin-top: 15px;">
+        <div class="export-group">
+          <label>Include:</label>
+          <div class="checkbox-group">
+            <label><input type="checkbox" id="incDiffuse" checked> Diffuse</label>
+            <label><input type="checkbox" id="incNormal" checked> Normal</label>
+            <label><input type="checkbox" id="incRoughness" checked> Roughness</label>
+            <label><input type="checkbox" id="incMetallic" checked> Metallic</label>
+            <label><input type="checkbox" id="incHeight"> Height</label>
+            <label><input type="checkbox" id="incAO"> AO</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="file-size-info" id="totalSizeInfo"></div>
+    </div>
+
     <div class="preview-grid" id="previewGrid">
       <div class="loading">Upload an image to see generated PBR maps</div>
     </div>
 
     <canvas id="three-preview"></canvas>
   </div>
+
+  <!-- JSZip for creating zip files -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
   <script type="importmap">
     {
@@ -120,6 +286,12 @@
       generateAOMapCanvas,
       generatePBRMaps
     } from './src/utils/PBRTextureGenerator.js'
+
+    // State
+    let currentFormat = 'png'
+    let jpgQuality = 0.85
+    let currentMaps = null
+    let diffuseCanvas = null
 
     // Three.js scene setup for preview
     let scene, camera, renderer, controls, mesh
@@ -177,36 +349,122 @@
       })
     }
 
-    function createPreviewCard(title, canvas, downloadName) {
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B'
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+    }
+
+    function getCanvasBlob(canvas, format, quality) {
+      return new Promise(resolve => {
+        const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png'
+        canvas.toBlob(blob => resolve(blob), mimeType, quality)
+      })
+    }
+
+    function getCanvasDataURL(canvas) {
+      const mimeType = currentFormat === 'jpg' ? 'image/jpeg' : 'image/png'
+      return canvas.toDataURL(mimeType, currentFormat === 'jpg' ? jpgQuality : undefined)
+    }
+
+    async function getCanvasSize(canvas) {
+      const blob = await getCanvasBlob(canvas, currentFormat, jpgQuality)
+      return blob.size
+    }
+
+    function createPreviewCard(title, canvas, mapKey) {
       const card = document.createElement('div')
       card.className = 'preview-card'
+      card.dataset.mapKey = mapKey
 
       const h3 = document.createElement('h3')
       h3.textContent = title
 
+      const footer = document.createElement('div')
+      footer.className = 'card-footer'
+
+      const sizeSpan = document.createElement('span')
+      sizeSpan.className = 'file-size'
+      sizeSpan.textContent = 'Calculating...'
+
       const button = document.createElement('button')
       button.textContent = 'Download'
       button.onclick = () => {
+        const prefix = document.getElementById('filePrefix').value || 'texture'
+        const ext = currentFormat
         const link = document.createElement('a')
-        link.download = downloadName
-        link.href = canvas.toDataURL('image/png')
+        link.download = `${prefix}_${mapKey}.${ext}`
+        link.href = getCanvasDataURL(canvas)
         link.click()
       }
 
+      footer.appendChild(sizeSpan)
+      footer.appendChild(button)
+
       card.appendChild(h3)
       card.appendChild(canvas)
-      card.appendChild(button)
+      card.appendChild(footer)
+
+      // Calculate file size async
+      getCanvasSize(canvas).then(size => {
+        sizeSpan.textContent = formatFileSize(size)
+      })
 
       return card
+    }
+
+    async function updateFileSizes() {
+      if (!currentMaps) return
+
+      const allMaps = {
+        diffuse: diffuseCanvas,
+        normal: currentMaps.normal,
+        roughness: currentMaps.roughness,
+        metallic: currentMaps.metallic,
+        height: currentMaps.height,
+        ao: currentMaps.ao
+      }
+
+      let totalSize = 0
+      const checkboxes = {
+        diffuse: document.getElementById('incDiffuse'),
+        normal: document.getElementById('incNormal'),
+        roughness: document.getElementById('incRoughness'),
+        metallic: document.getElementById('incMetallic'),
+        height: document.getElementById('incHeight'),
+        ao: document.getElementById('incAO')
+      }
+
+      // Update individual card sizes
+      const cards = document.querySelectorAll('.preview-card')
+      for (const card of cards) {
+        const mapKey = card.dataset.mapKey
+        if (allMaps[mapKey]) {
+          const size = await getCanvasSize(allMaps[mapKey])
+          const sizeSpan = card.querySelector('.file-size')
+          if (sizeSpan) sizeSpan.textContent = formatFileSize(size)
+
+          if (checkboxes[mapKey] && checkboxes[mapKey].checked) {
+            totalSize += size
+          }
+        }
+      }
+
+      // Update total size info
+      document.getElementById('totalSizeInfo').textContent =
+        `Estimated ZIP size: ~${formatFileSize(totalSize)} (${currentFormat.toUpperCase()}${currentFormat === 'jpg' ? ` @ ${Math.round(jpgQuality * 100)}%` : ''})`
     }
 
     function processImage(image) {
       const grid = document.getElementById('previewGrid')
       grid.innerHTML = ''
 
+      // Show export section
+      document.getElementById('exportSection').classList.add('visible')
+
       // Generate all maps
       console.time('PBR Generation')
-      const maps = generatePBRMaps(image, {
+      currentMaps = generatePBRMaps(image, {
         normal: { strength: 2.0, blur: 0 },
         roughness: { contrast: 1.0, brightness: 0, invert: true, blur: 0 },
         metallic: { threshold: 0.5, contrast: 1.5, blur: 1 },
@@ -216,19 +474,19 @@
       console.timeEnd('PBR Generation')
 
       // Create diffuse preview
-      const diffuseCanvas = document.createElement('canvas')
+      diffuseCanvas = document.createElement('canvas')
       diffuseCanvas.width = image.width
       diffuseCanvas.height = image.height
       const ctx = diffuseCanvas.getContext('2d')
       ctx.drawImage(image, 0, 0)
 
       // Add preview cards
-      grid.appendChild(createPreviewCard('Diffuse (Original)', diffuseCanvas, 'diffuse.png'))
-      grid.appendChild(createPreviewCard('Normal Map', maps.normal, 'normal.png'))
-      grid.appendChild(createPreviewCard('Roughness Map', maps.roughness, 'roughness.png'))
-      grid.appendChild(createPreviewCard('Metallic Map', maps.metallic, 'metallic.png'))
-      grid.appendChild(createPreviewCard('Height Map', maps.height, 'height.png'))
-      grid.appendChild(createPreviewCard('Ambient Occlusion', maps.ao, 'ao.png'))
+      grid.appendChild(createPreviewCard('Diffuse (Original)', diffuseCanvas, 'diffuse'))
+      grid.appendChild(createPreviewCard('Normal Map', currentMaps.normal, 'normal'))
+      grid.appendChild(createPreviewCard('Roughness Map', currentMaps.roughness, 'roughness'))
+      grid.appendChild(createPreviewCard('Metallic Map', currentMaps.metallic, 'metallic'))
+      grid.appendChild(createPreviewCard('Height Map', currentMaps.height, 'height'))
+      grid.appendChild(createPreviewCard('Ambient Occlusion', currentMaps.ao, 'ao'))
 
       // Update Three.js preview
       if (mesh) {
@@ -241,21 +499,115 @@
 
         mesh.material.map = textureFromCanvas(diffuseCanvas)
         mesh.material.map.colorSpace = THREE.SRGBColorSpace
-        mesh.material.normalMap = textureFromCanvas(maps.normal)
-        mesh.material.roughnessMap = textureFromCanvas(maps.roughness)
-        mesh.material.metalnessMap = textureFromCanvas(maps.metallic)
-        mesh.material.aoMap = textureFromCanvas(maps.ao)
+        mesh.material.normalMap = textureFromCanvas(currentMaps.normal)
+        mesh.material.roughnessMap = textureFromCanvas(currentMaps.roughness)
+        mesh.material.metalnessMap = textureFromCanvas(currentMaps.metallic)
+        mesh.material.aoMap = textureFromCanvas(currentMaps.ao)
         mesh.material.needsUpdate = true
       }
+
+      // Update file sizes
+      updateFileSizes()
+    }
+
+    async function downloadAllAsZip() {
+      if (!currentMaps || !diffuseCanvas) return
+
+      const btn = document.getElementById('downloadAllBtn')
+      btn.disabled = true
+      btn.innerHTML = 'Creating ZIP...'
+
+      try {
+        const zip = new JSZip()
+        const prefix = document.getElementById('filePrefix').value || 'texture'
+        const ext = currentFormat
+        const mimeType = currentFormat === 'jpg' ? 'image/jpeg' : 'image/png'
+        const quality = currentFormat === 'jpg' ? jpgQuality : undefined
+
+        const maps = {
+          diffuse: { canvas: diffuseCanvas, checkbox: document.getElementById('incDiffuse') },
+          normal: { canvas: currentMaps.normal, checkbox: document.getElementById('incNormal') },
+          roughness: { canvas: currentMaps.roughness, checkbox: document.getElementById('incRoughness') },
+          metallic: { canvas: currentMaps.metallic, checkbox: document.getElementById('incMetallic') },
+          height: { canvas: currentMaps.height, checkbox: document.getElementById('incHeight') },
+          ao: { canvas: currentMaps.ao, checkbox: document.getElementById('incAO') }
+        }
+
+        for (const [key, { canvas, checkbox }] of Object.entries(maps)) {
+          if (checkbox.checked) {
+            const blob = await getCanvasBlob(canvas, currentFormat, jpgQuality)
+            zip.file(`${prefix}_${key}.${ext}`, blob)
+          }
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' })
+
+        // Download the zip
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(zipBlob)
+        link.download = `${prefix}_pbr_textures.zip`
+        link.click()
+        URL.revokeObjectURL(link.href)
+
+      } catch (error) {
+        console.error('Error creating ZIP:', error)
+        alert('Error creating ZIP file. See console for details.')
+      }
+
+      btn.disabled = false
+      btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download All as ZIP
+      `
     }
 
     // Initialize
     initThreeJS()
 
+    // Format toggle
+    document.getElementById('btnPNG').addEventListener('click', () => {
+      currentFormat = 'png'
+      document.getElementById('btnPNG').classList.add('active')
+      document.getElementById('btnJPG').classList.remove('active')
+      document.getElementById('qualityGroup').style.display = 'none'
+      updateFileSizes()
+    })
+
+    document.getElementById('btnJPG').addEventListener('click', () => {
+      currentFormat = 'jpg'
+      document.getElementById('btnJPG').classList.add('active')
+      document.getElementById('btnPNG').classList.remove('active')
+      document.getElementById('qualityGroup').style.display = 'flex'
+      updateFileSizes()
+    })
+
+    // Quality slider
+    document.getElementById('jpgQuality').addEventListener('input', (e) => {
+      jpgQuality = e.target.value / 100
+      document.getElementById('qualityValue').textContent = `${e.target.value}%`
+      updateFileSizes()
+    })
+
+    // Checkbox changes
+    document.querySelectorAll('.checkbox-group input').forEach(cb => {
+      cb.addEventListener('change', updateFileSizes)
+    })
+
+    // Download all button
+    document.getElementById('downloadAllBtn').addEventListener('click', downloadAllAsZip)
+
     // Handle file input
     document.getElementById('imageInput').addEventListener('change', (e) => {
       const file = e.target.files[0]
       if (!file) return
+
+      // Set default prefix from filename
+      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '')
+      document.getElementById('filePrefix').value = nameWithoutExt
 
       const reader = new FileReader()
       reader.onload = (event) => {
