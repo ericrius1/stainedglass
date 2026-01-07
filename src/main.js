@@ -29,6 +29,10 @@ import {
   setupGlassPane,
   getParamConfigs
 } from "./glassParams.js"
+import {
+  createArtInstallation,
+  setupInstallationPane
+} from "./artInstallation.js"
 
 let camera, scene, renderer, controls
 let pane = null
@@ -122,7 +126,7 @@ async function init() {
   spotLight.target.position.set(0, 0, 0)
   spotLight.castShadow = true
   spotLight.angle = Math.PI / 4
-  spotLight.penumbra = 0.3
+  spotLight.penumbra = 1
   spotLight.decay = 1
   spotLight.distance = 5
   spotLight.shadow.mapType = THREE.HalfFloatType
@@ -248,7 +252,7 @@ async function init() {
   scene.add(glassPanel)
 
   // Ground plane to receive the colored caustic shadows
-  const groundGeometry = new THREE.PlaneGeometry(0.4, 0.4)
+  const groundGeometry = new THREE.PlaneGeometry(4, 4)
   const groundMaterial = new THREE.MeshStandardMaterial({
     color: 0x111111,
     roughness: 0.8,
@@ -259,6 +263,9 @@ async function init() {
   ground.position.y = 0
   ground.receiveShadow = true
   scene.add(ground)
+
+  // Art installation screen
+  createArtInstallation(scene)
 
   // Renderer
   renderer = new THREE.WebGPURenderer({ antialias: true })
@@ -444,6 +451,9 @@ function setupTweakpane() {
 
   // Glass parameters from separate module
   setupGlassPane(pane, glassMaterial)
+
+  // Art installation parameters
+  setupInstallationPane(pane)
 
   // Atmosphere folder
   const atmosphereFolder = pane.addFolder({ title: "Atmosphere" })
