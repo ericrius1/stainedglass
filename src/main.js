@@ -21,8 +21,13 @@ import { ImprovedNoise } from "three/examples/jsm/math/ImprovedNoise.js"
 import { bayer16 } from "three/examples/jsm/tsl/math/Bayer.js"
 import { bloom } from "three/examples/jsm/tsl/display/BloomNode.js"
 import { Pane } from "tweakpane"
+import { HandTrackingController } from "./utils/HandTrackingController.js"
+import { ParameterMapper } from "./utils/ParameterMapper.js"
 
 let camera, scene, renderer, controls
+let pane = null
+let handController = null
+let parameterMapper = null
 let postProcessing
 let glassPanel, glassMaterial
 let spotLight
@@ -65,7 +70,8 @@ const params = {
   refractionStrength: 0.6,
   // Glass
   glassIOR: 1.5,
-  glassEmissive: 0.15
+  glassEmissive: 0.15,
+  normalStrength: 1.0
 }
 
 let smokeAmountUniform, volumetricLightingIntensity, causticIntensityUniform
@@ -203,7 +209,7 @@ async function init() {
   // Apply normal map if available
   if (normalMapTexture) {
     glassMaterial.normalMap = normalMapTexture
-    glassMaterial.normalScale = new THREE.Vector2(1, 1)
+    glassMaterial.normalScale = new THREE.Vector2(params.normalStrength, params.normalStrength)
   }
 
   // This is the key - castShadowNode projects the colors through the shadow
@@ -350,11 +356,14 @@ async function init() {
   // Tweakpane
   setupTweakpane()
 
+  // Initialize hand tracking
+  await initHandTracking()
+
   window.addEventListener("resize", onWindowResize)
 }
 
 function setupTweakpane() {
-  const pane = new Pane({ title: "Stained Glass" })
+  pane = new Pane({ title: "Stained Glass" })
 
   // Build texture options from texture sets
   const textureOptions = Object.keys(textureSets).reduce((acc, key) => {
@@ -393,7 +402,7 @@ function setupTweakpane() {
           normalMapTexture = newNormal
         }
         glassMaterial.normalMap = normalMapTexture
-        glassMaterial.normalScale = new THREE.Vector2(1, 1)
+        glassMaterial.normalScale.set(params.normalStrength, params.normalStrength)
       } else {
         // Remove normal map if this set doesn't have one
         glassMaterial.normalMap = null
@@ -475,6 +484,19 @@ function setupTweakpane() {
       glassEmissiveUniform.value = ev.value
     })
 
+  glassFolder
+    .addBinding(params, "normalStrength", {
+      min: 0,
+      max: 3,
+      step: 0.1,
+      label: "Normal"
+    })
+    .on("change", (ev) => {
+      if (glassMaterial.normalMap) {
+        glassMaterial.normalScale.set(ev.value, ev.value)
+      }
+    })
+
   // Atmosphere folder
   const atmosphereFolder = pane.addFolder({ title: "Atmosphere" })
 
@@ -499,6 +521,137 @@ function setupTweakpane() {
     .on("change", (ev) => {
       volumetricLightingIntensity.value = ev.value
     })
+
+  // Hand Tracking folder
+  const handFolder = pane.addFolder({ title: "Hand Tracking", expanded: false })
+
+  const handState = {
+    enabled: false,
+    showVideo: false,
+    xParam: "causticScale",
+    yParam: "bloomIntensity"
+  }
+
+  // Parameter configs for axis mapping
+  const paramConfigs = {
+    causticScale: { min: 0.1, max: 2.0, uniform: causticScaleUniform },
+    chromaticAberration: { min: 0, max: 0.02, uniform: chromaticAberrationUniform },
+    glassIOR: { min: 0.05, max: 2.5, uniform: glassIORUniform },
+    bloomIntensity: { min: 0, max: 1.5, uniform: volumetricLightingIntensity },
+    smokeAmount: { min: 0, max: 10, uniform: smokeAmountUniform },
+    glassEmissive: { min: 0, max: 1, uniform: glassEmissiveUniform }
+  }
+
+  handFolder
+    .addBinding(handState, "enabled", { label: "Enable" })
+    .on("change", (ev) => {
+      if (handController) {
+        if (ev.value) {
+          handController.start()
+          if (parameterMapper) parameterMapper.setEnabled(true)
+          document.getElementById("hand-status").style.display = "block"
+        } else {
+          handController.stop()
+          if (parameterMapper) parameterMapper.setEnabled(false)
+          document.getElementById("hand-status").style.display = "none"
+        }
+      }
+    })
+
+  handFolder
+    .addBinding(handState, "showVideo", { label: "Show Video" })
+    .on("change", (ev) => {
+      document.getElementById("hand-video").style.display = ev.value ? "block" : "none"
+    })
+
+  handFolder
+    .addBinding(handState, "xParam", {
+      label: "X-Axis",
+      options: {
+        "Pattern Scale": "causticScale",
+        Chromatic: "chromaticAberration",
+        "Glass IOR": "glassIOR"
+      }
+    })
+    .on("change", (ev) => {
+      if (parameterMapper) {
+        parameterMapper.removeMappingsForAxis("x")
+        const config = paramConfigs[ev.value]
+        parameterMapper.addMapping(ev.value, { axis: "x", ...config })
+      }
+    })
+
+  handFolder
+    .addBinding(handState, "yParam", {
+      label: "Y-Axis",
+      options: {
+        Bloom: "bloomIntensity",
+        "Fog Density": "smokeAmount",
+        "Glass Emissive": "glassEmissive"
+      }
+    })
+    .on("change", (ev) => {
+      if (parameterMapper) {
+        parameterMapper.removeMappingsForAxis("y")
+        const config = paramConfigs[ev.value]
+        parameterMapper.addMapping(ev.value, { axis: "y", ...config })
+      }
+    })
+}
+
+async function initHandTracking() {
+  try {
+    const videoElement = document.getElementById("hand-video")
+    const statusElement = document.getElementById("hand-status")
+
+    // Create hand controller
+    handController = new HandTrackingController({
+      smoothing: 0.25,
+      landmark: 9 // Palm center
+    })
+
+    // Create parameter mapper
+    parameterMapper = new ParameterMapper()
+    parameterMapper.init(params, pane)
+
+    // Configure default mappings
+    parameterMapper.addMapping("causticScale", {
+      axis: "x",
+      min: 0.1,
+      max: 2.0,
+      uniform: causticScaleUniform
+    })
+
+    parameterMapper.addMapping("bloomIntensity", {
+      axis: "y",
+      min: 0,
+      max: 1.5,
+      uniform: volumetricLightingIntensity
+    })
+
+    // Initialize and start camera
+    await handController.init(videoElement)
+    await handController.startCamera()
+
+    // Subscribe to position changes
+    handController.onPositionChange((position, isDetected) => {
+      if (statusElement) {
+        statusElement.textContent = `Hand: ${isDetected ? "Detected" : "Not Detected"}`
+        statusElement.className = isDetected ? "detected" : "not-detected"
+      }
+
+      if (isDetected) {
+        parameterMapper.update(position)
+      }
+    })
+
+    // Don't start by default - user enables via UI
+    parameterMapper.setEnabled(false)
+
+    console.log("Hand tracking initialized successfully")
+  } catch (error) {
+    console.warn("Hand tracking initialization failed:", error)
+  }
 }
 
 function onWindowResize() {

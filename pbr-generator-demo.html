@@ -455,22 +455,24 @@
     }
 
     function processImage(image) {
-      const grid = document.getElementById('previewGrid')
-      grid.innerHTML = ''
+      try {
+        const grid = document.getElementById('previewGrid')
+        grid.innerHTML = ''
 
-      // Show export section
-      document.getElementById('exportSection').classList.add('visible')
+        // Show export section
+        document.getElementById('exportSection').classList.add('visible')
 
-      // Generate all maps
-      console.time('PBR Generation')
-      currentMaps = generatePBRMaps(image, {
-        normal: { strength: 2.0, blur: 0 },
-        roughness: { contrast: 1.0, brightness: 0, invert: true, blur: 0 },
-        metallic: { threshold: 0.5, contrast: 1.5, blur: 1 },
-        height: { contrast: 1.0, blur: 1 },
-        ao: { strength: 1.0, radius: 5 }
-      })
-      console.timeEnd('PBR Generation')
+        // Generate all maps
+        console.time('PBR Generation')
+        currentMaps = generatePBRMaps(image, {
+          normal: { strength: 2.0, blur: 0 },
+          roughness: { contrast: 1.0, brightness: 0, invert: true, blur: 0 },
+          metallic: { threshold: 0.5, contrast: 1.5, blur: 1 },
+          height: { contrast: 1.0, blur: 1 },
+          ao: { strength: 1.0, radius: 5 }
+        })
+        console.timeEnd('PBR Generation')
+        console.log('Generated maps:', Object.keys(currentMaps))
 
       // Create diffuse preview
       diffuseCanvas = document.createElement('canvas')
@@ -508,6 +510,10 @@
 
       // Update file sizes
       updateFileSizes()
+      } catch (error) {
+        console.error('Error processing image:', error)
+        alert('Error generating PBR maps: ' + error.message)
+      }
     }
 
     async function downloadAllAsZip() {
