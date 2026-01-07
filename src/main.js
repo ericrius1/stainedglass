@@ -131,14 +131,19 @@ async function init() {
       div(1.0, glassIORUniform)
     ).normalize()
 
-    // View-dependent intensity falloff
-    const viewZ = normalView.z.pow(causticOcclusionUniform)
+    // Edge falloff based on UV distance from center (works for flat surfaces)
+    // Creates vignette-like effect where caustics fade toward edges
+    const uvCentered = uv().sub(0.5).mul(2.0) // -1 to 1
+    const distFromCenter = uvCentered.length() // 0 at center, ~1.4 at corners
+    const edgeFalloff = distFromCenter.mul(causticOcclusionUniform.mul(0.1)).clamp(0, 1)
+    const viewZ = edgeFalloff.oneMinus() // 1 at center, falls off toward edges
 
     // UV for caustic pattern - use refraction to create wavy projection
     const causticUV = refractionVector.xy.mul(causticScaleUniform)
 
     // Chromatic aberration offset for rainbow edges
     const chromaticOffset = normalView.z
+      .abs()
       .pow(-0.9)
       .mul(chromaticAberrationUniform)
 
@@ -379,8 +384,8 @@ function setupTweakpane(textureLoader) {
 
   causticsFolder
     .addBinding(params, "causticOcclusion", {
-      min: 0.1,
-      max: 5,
+      min: 0,
+      max: 20,
       step: 0.1,
       label: "Occlusion"
     })

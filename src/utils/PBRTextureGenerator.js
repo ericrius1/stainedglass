@@ -1,7 +1,8 @@
 /**
  * PBRTextureGenerator - Generate PBR texture maps from a diffuse/albedo image
  *
- * Generates normal, roughness, and metallic maps using Canvas 2D processing.
+ * Generates normal and combined metallic-roughness maps using Canvas 2D processing.
+ * The metallic-roughness map follows glTF convention: G=roughness, B=metallic.
  * Works with any Three.js setup (WebGL, WebGPU) or standalone.
  * Inspired by GenPBR.com
  *
@@ -14,8 +15,9 @@
  *
  * material.map = maps.diffuse
  * material.normalMap = maps.normal
- * material.roughnessMap = maps.roughness
- * material.metalnessMap = maps.metallic
+ * // Combined metallic-roughness: G=roughness, B=metallic
+ * material.roughnessMap = maps.metallicRoughness
+ * material.metalnessMap = maps.metallicRoughness
  *
  * @example
  * // Standalone (no Three.js)
@@ -23,7 +25,7 @@
  *
  * const image = document.getElementById('myImage')
  * const canvasMaps = generatePBRMaps(image)
- * // Returns { normal: Canvas, roughness: Canvas, metallic: Canvas, ... }
+ * // Returns { normal: Canvas, metallicRoughness: Canvas, height: Canvas, ao: Canvas }
  */
 
 import * as THREE from 'three'
@@ -58,8 +60,8 @@ export const defaultOptions = {
     blur: 1,            // Blur radius in pixels (0-10)
   },
   ao: {
-    strength: 1.0,      // AO strength (0-3)
-    radius: 5,          // Sample radius in pixels (1-20)
+    strength: 3.0,      // AO strength (0-10)
+    radius: 8,          // Sample radius in pixels (1-30)
   }
 }
 
@@ -284,13 +286,15 @@ export function generateRoughnessMapCanvas(source, options = {}) {
 }
 
 /**
- * Generate a metallic map from an image
+ * Generate a combined metallic-roughness map from an image
+ * Follows glTF convention: G = roughness, B = metallic
  * @param {HTMLImageElement|HTMLCanvasElement|ImageData} source - Source image
- * @param {Object} options - Generation options
- * @returns {HTMLCanvasElement} Generated metallic map as canvas
+ * @param {Object} options - Generation options with roughness and metallic sub-options
+ * @returns {HTMLCanvasElement} Generated metallic-roughness map as canvas
  */
-export function generateMetallicMapCanvas(source, options = {}) {
-  const opts = { ...defaultOptions.metallic, ...options }
+export function generateMetallicRoughnessMapCanvas(source, options = {}) {
+  const roughnessOpts = { ...defaultOptions.roughness, ...options.roughness }
+  const metallicOpts = { ...defaultOptions.metallic, ...options.metallic }
 
   const canvas = document.createElement('canvas')
   let width, height, ctx
@@ -311,13 +315,22 @@ export function generateMetallicMapCanvas(source, options = {}) {
     ctx.drawImage(source, 0, 0)
   }
 
-  let imageData = ctx.getImageData(0, 0, width, height)
+  const baseImageData = ctx.getImageData(0, 0, width, height)
 
-  if (opts.blur > 0) {
-    imageData = applyBlur(imageData, Math.round(opts.blur))
+  // Apply blur separately for roughness and metallic if needed
+  let roughnessData = baseImageData
+  let metallicData = baseImageData
+
+  if (roughnessOpts.blur > 0) {
+    roughnessData = applyBlur(baseImageData, Math.round(roughnessOpts.blur))
+  }
+  if (metallicOpts.blur > 0) {
+    metallicData = applyBlur(baseImageData, Math.round(metallicOpts.blur))
   }
 
-  const data = imageData.data
+  const roughnessPixels = roughnessData.data
+  const metallicPixels = metallicData.data
+
   const outputCanvas = document.createElement('canvas')
   outputCanvas.width = width
   outputCanvas.height = height
@@ -327,39 +340,38 @@ export function generateMetallicMapCanvas(source, options = {}) {
 
   for (let i = 0; i < width * height; i++) {
     const idx = i * 4
-    const r = data[idx] / 255
-    const g = data[idx + 1] / 255
-    const b = data[idx + 2] / 255
 
+    // Calculate roughness from roughness-blurred data
+    let rough = getLuminance(roughnessPixels[idx], roughnessPixels[idx + 1], roughnessPixels[idx + 2]) / 255
+    rough = (rough - 0.5) * roughnessOpts.contrast + 0.5
+    rough = rough + roughnessOpts.brightness
+    if (roughnessOpts.invert) {
+      rough = 1 - rough
+    }
+    rough = clamp(rough, 0, 1)
+
+    // Calculate metallic from metallic-blurred data
+    const r = metallicPixels[idx] / 255
+    const g = metallicPixels[idx + 1] / 255
+    const b = metallicPixels[idx + 2] / 255
     const lum = getLuminance(r, g, b)
     const sat = getSaturation(r, g, b)
-
-    // Metallic heuristic: high luminance + low saturation = metallic
     let metallic = lum * (1 - sat)
-
-    // Apply smoothstep threshold
-    const edge0 = opts.threshold - 0.1
-    const edge1 = opts.threshold + 0.1
+    const edge0 = metallicOpts.threshold - 0.1
+    const edge1 = metallicOpts.threshold + 0.1
     const t = clamp((metallic - edge0) / (edge1 - edge0), 0, 1)
-    metallic = t * t * (3 - 2 * t) // smoothstep
-
-    // Apply contrast
-    metallic = (metallic - 0.5) * opts.contrast + 0.5
-
-    // Apply brightness
-    metallic = metallic + opts.brightness
-
-    // Invert if needed
-    if (opts.invert) {
+    metallic = t * t * (3 - 2 * t)
+    metallic = (metallic - 0.5) * metallicOpts.contrast + 0.5
+    metallic = metallic + metallicOpts.brightness
+    if (metallicOpts.invert) {
       metallic = 1 - metallic
     }
-
     metallic = clamp(metallic, 0, 1)
-    const value = Math.round(metallic * 255)
 
-    output[idx] = value
-    output[idx + 1] = value
-    output[idx + 2] = value
+    // Pack into glTF format: R=unused(0), G=roughness, B=metallic
+    output[idx] = 0                              // R - unused
+    output[idx + 1] = Math.round(rough * 255)    // G - roughness
+    output[idx + 2] = Math.round(metallic * 255) // B - metallic
     output[idx + 3] = 255
   }
 
@@ -483,29 +495,41 @@ export function generateAOMapCanvas(source, options = {}) {
   const output = outputData.data
 
   const radius = Math.round(opts.radius)
-  const angleStep = Math.PI / 4 // 8 directions
+  const numDirections = 16 // More directions for smoother results
+  const angleStep = (Math.PI * 2) / numDirections
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const centerHeight = luminance[y * width + x]
       let occlusion = 0
-      let samples = 0
+      let totalWeight = 0
 
-      // Sample in 8 directions at various radii
+      // Sample in multiple directions at various radii
       for (let angle = 0; angle < Math.PI * 2; angle += angleStep) {
         for (let r = 1; r <= radius; r++) {
           const nx = clamp(Math.round(x + Math.cos(angle) * r), 0, width - 1)
           const ny = clamp(Math.round(y + Math.sin(angle) * r), 0, height - 1)
           const sampleHeight = luminance[ny * width + nx]
 
+          // Weight falls off with distance (but not as aggressively)
+          const weight = 1.0 - (r - 1) / radius
+
           // If surrounding is higher, this pixel is occluded
           const heightDiff = sampleHeight - centerHeight
-          occlusion += Math.max(0, heightDiff) / r
-          samples++
+          if (heightDiff > 0) {
+            // Amplify the occlusion effect
+            occlusion += heightDiff * weight * 2.0
+          }
+          totalWeight += weight
         }
       }
 
-      occlusion = (occlusion / samples) * opts.strength
+      // Normalize and apply strength
+      occlusion = (occlusion / totalWeight) * opts.strength
+
+      // Apply a curve for more dramatic effect
+      occlusion = Math.pow(occlusion, 0.7)
+
       let ao = 1 - clamp(occlusion, 0, 1)
       const value = Math.round(ao * 255)
 
@@ -530,8 +554,7 @@ export function generateAOMapCanvas(source, options = {}) {
 export function generatePBRMaps(source, options = {}) {
   return {
     normal: generateNormalMapCanvas(source, options.normal),
-    roughness: generateRoughnessMapCanvas(source, options.roughness),
-    metallic: generateMetallicMapCanvas(source, options.metallic),
+    metallicRoughness: generateMetallicRoughnessMapCanvas(source, options),
     height: generateHeightMapCanvas(source, options.height),
     ao: generateAOMapCanvas(source, options.ao),
   }
@@ -574,8 +597,7 @@ export class PBRTextureGenerator {
     return {
       diffuse: diffuseTexture,
       normal: canvasToTexture(canvasMaps.normal),
-      roughness: canvasToTexture(canvasMaps.roughness),
-      metallic: canvasToTexture(canvasMaps.metallic),
+      metallicRoughness: canvasToTexture(canvasMaps.metallicRoughness),
       height: canvasToTexture(canvasMaps.height),
       ao: canvasToTexture(canvasMaps.ao),
     }
@@ -584,11 +606,11 @@ export class PBRTextureGenerator {
   /**
    * Generate PBR maps for specific map types only
    * @param {THREE.Texture} diffuseTexture - The input diffuse/albedo texture
-   * @param {string[]} mapTypes - Array of map types: 'normal', 'roughness', 'metallic', 'height', 'ao'
+   * @param {string[]} mapTypes - Array of map types: 'normal', 'metallicRoughness', 'height', 'ao'
    * @param {Object} options - Generation options
    * @returns {Object} Object containing requested Three.js textures
    */
-  generateSelected(diffuseTexture, mapTypes = ['normal', 'roughness', 'metallic'], options = {}) {
+  generateSelected(diffuseTexture, mapTypes = ['normal', 'metallicRoughness'], options = {}) {
     const image = diffuseTexture.image
     const result = { diffuse: diffuseTexture }
 
@@ -597,14 +619,9 @@ export class PBRTextureGenerator {
       result.normal = canvasToTexture(canvas)
     }
 
-    if (mapTypes.includes('roughness')) {
-      const canvas = generateRoughnessMapCanvas(image, options.roughness)
-      result.roughness = canvasToTexture(canvas)
-    }
-
-    if (mapTypes.includes('metallic')) {
-      const canvas = generateMetallicMapCanvas(image, options.metallic)
-      result.metallic = canvasToTexture(canvas)
+    if (mapTypes.includes('metallicRoughness')) {
+      const canvas = generateMetallicRoughnessMapCanvas(image, options)
+      result.metallicRoughness = canvasToTexture(canvas)
     }
 
     if (mapTypes.includes('height')) {
@@ -644,24 +661,13 @@ export class PBRTextureGenerator {
   }
 
   /**
-   * Generate only a roughness map
+   * Generate only a metallic-roughness map
    * @param {THREE.Texture} diffuseTexture - The input texture
-   * @param {Object} options - Roughness map options
-   * @returns {THREE.Texture} The generated roughness map texture
+   * @param {Object} options - Options with roughness and metallic sub-options
+   * @returns {THREE.Texture} The generated metallic-roughness map texture (G=roughness, B=metallic)
    */
-  generateRoughnessMap(diffuseTexture, options = {}) {
-    const canvas = generateRoughnessMapCanvas(diffuseTexture.image, options)
-    return canvasToTexture(canvas)
-  }
-
-  /**
-   * Generate only a metallic map
-   * @param {THREE.Texture} diffuseTexture - The input texture
-   * @param {Object} options - Metallic map options
-   * @returns {THREE.Texture} The generated metallic map texture
-   */
-  generateMetallicMap(diffuseTexture, options = {}) {
-    const canvas = generateMetallicMapCanvas(diffuseTexture.image, options)
+  generateMetallicRoughnessMap(diffuseTexture, options = {}) {
+    const canvas = generateMetallicRoughnessMapCanvas(diffuseTexture.image, options)
     return canvasToTexture(canvas)
   }
 

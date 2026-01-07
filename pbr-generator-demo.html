@@ -243,10 +243,9 @@
           <div class="checkbox-group">
             <label><input type="checkbox" id="incDiffuse" checked> Diffuse</label>
             <label><input type="checkbox" id="incNormal" checked> Normal</label>
-            <label><input type="checkbox" id="incRoughness" checked> Roughness</label>
-            <label><input type="checkbox" id="incMetallic" checked> Metallic</label>
+            <label><input type="checkbox" id="incMetallicRoughness" checked> Metallic-Roughness</label>
             <label><input type="checkbox" id="incHeight"> Height</label>
-            <label><input type="checkbox" id="incAO"> AO</label>
+            <label><input type="checkbox" id="incAO" checked> AO</label>
           </div>
         </div>
       </div>
@@ -280,8 +279,7 @@
     // Import PBR generator functions directly (standalone mode)
     import {
       generateNormalMapCanvas,
-      generateRoughnessMapCanvas,
-      generateMetallicMapCanvas,
+      generateMetallicRoughnessMapCanvas,
       generateHeightMapCanvas,
       generateAOMapCanvas,
       generatePBRMaps
@@ -326,6 +324,9 @@
 
       // Create sphere with placeholder material
       const geometry = new THREE.SphereGeometry(1, 64, 64)
+      // Copy uv to uv2 for AO map support
+      geometry.setAttribute('uv2', geometry.attributes.uv)
+
       const material = new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.5,
@@ -419,8 +420,7 @@
       const allMaps = {
         diffuse: diffuseCanvas,
         normal: currentMaps.normal,
-        roughness: currentMaps.roughness,
-        metallic: currentMaps.metallic,
+        metallicRoughness: currentMaps.metallicRoughness,
         height: currentMaps.height,
         ao: currentMaps.ao
       }
@@ -429,8 +429,7 @@
       const checkboxes = {
         diffuse: document.getElementById('incDiffuse'),
         normal: document.getElementById('incNormal'),
-        roughness: document.getElementById('incRoughness'),
-        metallic: document.getElementById('incMetallic'),
+        metallicRoughness: document.getElementById('incMetallicRoughness'),
         height: document.getElementById('incHeight'),
         ao: document.getElementById('incAO')
       }
@@ -483,8 +482,7 @@
       // Add preview cards
       grid.appendChild(createPreviewCard('Diffuse (Original)', diffuseCanvas, 'diffuse'))
       grid.appendChild(createPreviewCard('Normal Map', currentMaps.normal, 'normal'))
-      grid.appendChild(createPreviewCard('Roughness Map', currentMaps.roughness, 'roughness'))
-      grid.appendChild(createPreviewCard('Metallic Map', currentMaps.metallic, 'metallic'))
+      grid.appendChild(createPreviewCard('Metallic-Roughness (G=rough, B=metal)', currentMaps.metallicRoughness, 'metallicRoughness'))
       grid.appendChild(createPreviewCard('Height Map', currentMaps.height, 'height'))
       grid.appendChild(createPreviewCard('Ambient Occlusion', currentMaps.ao, 'ao'))
 
@@ -500,8 +498,10 @@
         mesh.material.map = textureFromCanvas(diffuseCanvas)
         mesh.material.map.colorSpace = THREE.SRGBColorSpace
         mesh.material.normalMap = textureFromCanvas(currentMaps.normal)
-        mesh.material.roughnessMap = textureFromCanvas(currentMaps.roughness)
-        mesh.material.metalnessMap = textureFromCanvas(currentMaps.metallic)
+        // Combined texture: G=roughness, B=metallic
+        const mrTexture = textureFromCanvas(currentMaps.metallicRoughness)
+        mesh.material.roughnessMap = mrTexture
+        mesh.material.metalnessMap = mrTexture
         mesh.material.aoMap = textureFromCanvas(currentMaps.ao)
         mesh.material.needsUpdate = true
       }
@@ -527,8 +527,7 @@
         const maps = {
           diffuse: { canvas: diffuseCanvas, checkbox: document.getElementById('incDiffuse') },
           normal: { canvas: currentMaps.normal, checkbox: document.getElementById('incNormal') },
-          roughness: { canvas: currentMaps.roughness, checkbox: document.getElementById('incRoughness') },
-          metallic: { canvas: currentMaps.metallic, checkbox: document.getElementById('incMetallic') },
+          metallicRoughness: { canvas: currentMaps.metallicRoughness, checkbox: document.getElementById('incMetallicRoughness') },
           height: { canvas: currentMaps.height, checkbox: document.getElementById('incHeight') },
           ao: { canvas: currentMaps.ao, checkbox: document.getElementById('incAO') }
         }

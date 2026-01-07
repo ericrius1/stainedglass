@@ -44,8 +44,7 @@ export function createPBRGeneratorUI(pane, generator, diffuseTexture, material =
     ao: { ...defaultOptions.ao },
     enabled: {
       normal: true,
-      roughness: true,
-      metallic: true,
+      metallicRoughness: true,
       height: false,
       ao: false,
     }
@@ -67,11 +66,10 @@ export function createPBRGeneratorUI(pane, generator, diffuseTexture, material =
       if (currentMaps.normal && state.enabled.normal) {
         material.normalMap = currentMaps.normal
       }
-      if (currentMaps.roughness && state.enabled.roughness) {
-        material.roughnessMap = currentMaps.roughness
-      }
-      if (currentMaps.metallic && state.enabled.metallic) {
-        material.metalnessMap = currentMaps.metallic
+      if (currentMaps.metallicRoughness && state.enabled.metallicRoughness) {
+        // Combined texture: G=roughness, B=metallic
+        material.roughnessMap = currentMaps.metallicRoughness
+        material.metalnessMap = currentMaps.metallicRoughness
       }
       if (currentMaps.height && state.enabled.height) {
         material.displacementMap = currentMaps.height
@@ -114,41 +112,34 @@ export function createPBRGeneratorUI(pane, generator, diffuseTexture, material =
     }
   })
 
-  // Roughness map controls
-  const roughnessFolder = folder.addFolder({ title: 'Roughness Map', expanded: false })
-  roughnessFolder.addBinding(state.enabled, 'roughness', { label: 'Enabled' })
-  roughnessFolder.addBinding(state.roughness, 'contrast', { min: 0, max: 3, step: 0.1, label: 'Contrast' })
-  roughnessFolder.addBinding(state.roughness, 'brightness', { min: -1, max: 1, step: 0.05, label: 'Brightness' })
-  roughnessFolder.addBinding(state.roughness, 'blur', { min: 0, max: 10, step: 1, label: 'Blur' })
-  roughnessFolder.addBinding(state.roughness, 'invert', { label: 'Invert' })
-  roughnessFolder.addButton({ title: 'Update Roughness' }).on('click', () => {
-    if (state.enabled.roughness) {
-      const roughnessMap = generator.generateRoughnessMap(diffuseTexture, state.roughness)
-      if (material) {
-        material.roughnessMap = roughnessMap
-        material.needsUpdate = true
-      }
-      if (currentMaps) currentMaps.roughness = roughnessMap
-      if (onUpdate) onUpdate(currentMaps)
-    }
-  })
+  // Combined Metallic-Roughness map controls
+  const mrFolder = folder.addFolder({ title: 'Metallic-Roughness Map', expanded: false })
+  mrFolder.addBinding(state.enabled, 'metallicRoughness', { label: 'Enabled' })
 
-  // Metallic map controls
-  const metallicFolder = folder.addFolder({ title: 'Metallic Map', expanded: false })
-  metallicFolder.addBinding(state.enabled, 'metallic', { label: 'Enabled' })
-  metallicFolder.addBinding(state.metallic, 'threshold', { min: 0, max: 1, step: 0.05, label: 'Threshold' })
-  metallicFolder.addBinding(state.metallic, 'contrast', { min: 0, max: 3, step: 0.1, label: 'Contrast' })
-  metallicFolder.addBinding(state.metallic, 'brightness', { min: -1, max: 1, step: 0.05, label: 'Brightness' })
-  metallicFolder.addBinding(state.metallic, 'blur', { min: 0, max: 10, step: 1, label: 'Blur' })
-  metallicFolder.addBinding(state.metallic, 'invert', { label: 'Invert' })
-  metallicFolder.addButton({ title: 'Update Metallic' }).on('click', () => {
-    if (state.enabled.metallic) {
-      const metallicMap = generator.generateMetallicMap(diffuseTexture, state.metallic)
+  // Roughness sub-controls
+  const roughnessSubFolder = mrFolder.addFolder({ title: 'Roughness', expanded: false })
+  roughnessSubFolder.addBinding(state.roughness, 'contrast', { min: 0, max: 3, step: 0.1, label: 'Contrast' })
+  roughnessSubFolder.addBinding(state.roughness, 'brightness', { min: -1, max: 1, step: 0.05, label: 'Brightness' })
+  roughnessSubFolder.addBinding(state.roughness, 'blur', { min: 0, max: 10, step: 1, label: 'Blur' })
+  roughnessSubFolder.addBinding(state.roughness, 'invert', { label: 'Invert' })
+
+  // Metallic sub-controls
+  const metallicSubFolder = mrFolder.addFolder({ title: 'Metallic', expanded: false })
+  metallicSubFolder.addBinding(state.metallic, 'threshold', { min: 0, max: 1, step: 0.05, label: 'Threshold' })
+  metallicSubFolder.addBinding(state.metallic, 'contrast', { min: 0, max: 3, step: 0.1, label: 'Contrast' })
+  metallicSubFolder.addBinding(state.metallic, 'brightness', { min: -1, max: 1, step: 0.05, label: 'Brightness' })
+  metallicSubFolder.addBinding(state.metallic, 'blur', { min: 0, max: 10, step: 1, label: 'Blur' })
+  metallicSubFolder.addBinding(state.metallic, 'invert', { label: 'Invert' })
+
+  mrFolder.addButton({ title: 'Update Metallic-Roughness' }).on('click', () => {
+    if (state.enabled.metallicRoughness) {
+      const mrMap = generator.generateMetallicRoughnessMap(diffuseTexture, state)
       if (material) {
-        material.metalnessMap = metallicMap
+        material.roughnessMap = mrMap
+        material.metalnessMap = mrMap
         material.needsUpdate = true
       }
-      if (currentMaps) currentMaps.metallic = metallicMap
+      if (currentMaps) currentMaps.metallicRoughness = mrMap
       if (onUpdate) onUpdate(currentMaps)
     }
   })
@@ -175,19 +166,28 @@ export function createPBRGeneratorUI(pane, generator, diffuseTexture, material =
   // AO map controls
   const aoFolder = folder.addFolder({ title: 'Ambient Occlusion Map', expanded: false })
   aoFolder.addBinding(state.enabled, 'ao', { label: 'Enabled' })
-  aoFolder.addBinding(state.ao, 'strength', { min: 0, max: 3, step: 0.1, label: 'Strength' })
-  aoFolder.addBinding(state.ao, 'radius', { min: 1, max: 20, step: 1, label: 'Radius' })
-  aoFolder.addButton({ title: 'Update AO' }).on('click', () => {
+
+  const updateAO = () => {
     if (state.enabled.ao) {
       const aoMap = generator.generateAOMap(diffuseTexture, state.ao)
       if (material) {
         material.aoMap = aoMap
+        // Ensure geometry has uv2 for AO to work
+        if (material.aoMap && material.geometry && !material.geometry.attributes.uv2) {
+          console.warn('PBRGeneratorUI: Geometry needs uv2 attribute for aoMap. Copy uv to uv2.')
+        }
         material.needsUpdate = true
       }
       if (currentMaps) currentMaps.ao = aoMap
       if (onUpdate) onUpdate(currentMaps)
     }
-  })
+  }
+
+  aoFolder.addBinding(state.ao, 'strength', { min: 0, max: 10, step: 0.1, label: 'Strength' })
+    .on('change', updateAO)
+  aoFolder.addBinding(state.ao, 'radius', { min: 1, max: 30, step: 1, label: 'Radius' })
+    .on('change', updateAO)
+  aoFolder.addButton({ title: 'Update AO' }).on('click', updateAO)
 
   // Initial generation
   currentMaps = regenerate()
