@@ -42,14 +42,31 @@ export const numTextureSets = Object.keys(textureSets).length
 // Default scene parameters
 export const defaultParams = {
   texture: initialTexture,
-  // Panel layout
+  // Panel layout (legacy - kept for compatibility)
   numPanels: 1,
   panelGap: 0.1,
   panelWidth: 0.8,
   // Fog & Bloom
   smokeAmount: 4,
-  bloomIntensity: 0.3,
+  bloomIntensity: 1.2,
   fogBoundsX: 4,
-  fogBoundsY: 1.5,
-  fogBoundsZ: 4
+  fogBoundsY: 2.5,
+  fogBoundsZ: 4,
+  // Castle mode
+  useCastle: true
+}
+
+// Castle generator defaults
+export const defaultCastleParams = {
+  seed: Math.floor(Math.random() * 10000),
+  towerCount: 4,
+  towerRadius: 0.15,
+  towerHeight: 1.2,
+  wallHeight: 0.6,
+  wallThickness: 0.08,
+  baseRadius: 0.8,
+  windowHeight: 0.4,
+  windowWidth: 0.25,
+  crenelationHeight: 0.1,
+  crenelationCount: 8
 }

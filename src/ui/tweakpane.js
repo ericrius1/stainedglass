@@ -5,6 +5,7 @@ import { setupInstallationPane } from "../artInstallation.js"
 import { swapTextureSet } from "../textures/textureManager.js"
 import { updatePanelLayout } from "../scene/panelLayout.js"
 import { updateFogBounds } from "../scene/fogVolume.js"
+import { setupCastlePane, setRegenerateCallback } from "./castlePane.js"
 
 let pane = null
 
@@ -16,7 +17,8 @@ export function createTweakpane(
   smokeAmountUniform,
   volumetricLightingIntensity,
   handController,
-  parameterMapper
+  parameterMapper,
+  castleRegenerateCallback = null
 ) {
   pane = new Pane({ title: "Stained Glass" })
 
@@ -30,37 +32,47 @@ export function createTweakpane(
     return acc
   }, {})
 
-  // Texture selection - swap texture without reloading
-  pane
-    .addBinding(params, "texture", { options: textureOptions })
-    .on("change", async (ev) => {
-      await swapTextureSet(ev.value, glassMaterial, glassParams)
-    })
+  // Texture selection - swap texture without reloading (legacy mode only)
+  if (!params.useCastle) {
+    pane
+      .addBinding(params, "texture", { options: textureOptions })
+      .on("change", async (ev) => {
+        await swapTextureSet(ev.value, glassMaterial, glassParams)
+      })
+  }
 
-  // Panel Layout folder
-  const layoutFolder = pane.addFolder({ title: "Panel Layout" })
+  // Castle Generator folder (if castle mode enabled)
+  if (params.useCastle && castleRegenerateCallback) {
+    setRegenerateCallback(castleRegenerateCallback)
+    setupCastlePane(pane)
+  }
 
-  layoutFolder
-    .addBinding(params, "numPanels", {
-      min: 0,
-      max: numTextureSets,
-      step: 1,
-      label: "Number of Panels"
-    })
-    .on("change", () => {
-      updatePanelLayout(scene, glassMaterial, params)
-    })
+  // Panel Layout folder (legacy mode only)
+  if (!params.useCastle) {
+    const layoutFolder = pane.addFolder({ title: "Panel Layout" })
 
-  layoutFolder
-    .addBinding(params, "panelGap", {
-      min: 0,
-      max: 0.5,
-      step: 0.01,
-      label: "Gap Between"
-    })
-    .on("change", () => {
-      updatePanelLayout(scene, glassMaterial, params)
-    })
+    layoutFolder
+      .addBinding(params, "numPanels", {
+        min: 0,
+        max: numTextureSets,
+        step: 1,
+        label: "Number of Panels"
+      })
+      .on("change", () => {
+        updatePanelLayout(scene, glassMaterial, params)
+      })
+
+    layoutFolder
+      .addBinding(params, "panelGap", {
+        min: 0,
+        max: 0.5,
+        step: 0.01,
+        label: "Gap Between"
+      })
+      .on("change", () => {
+        updatePanelLayout(scene, glassMaterial, params)
+      })
+  }
 
   // Glass parameters from separate module
   setupGlassPane(pane, glassMaterial)

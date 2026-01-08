@@ -15,6 +15,7 @@ import { createPostProcessing, renderPostProcessing } from "./core/postProcessin
 // Texture management
 import {
   loadInitialTextures,
+  loadAllTextureSets,
   getStainedGlassTexture,
   getNormalMapTexture,
   getMetallicRoughnessTexture,
@@ -23,12 +24,14 @@ import {
 
 // Materials
 import { createGlassMaterial, getGlassMaterial } from "./materials/glassMaterial.js"
+import { createAllWindowMaterials, getWindowMaterials, updateAllWindowMaterials } from "./materials/glassMaterialFactory.js"
 
 // Scene objects
 import { createPanelGeometry, updatePanelLayout } from "./scene/panelLayout.js"
 import { createGround } from "./scene/ground.js"
 import { createSpotLight } from "./scene/lighting.js"
 import { createFogVolume, getVolumetricMaterial } from "./scene/fogVolume.js"
+import { generateCastle, castleParams } from "./scene/castleGenerator.js"
 
 // Art installation
 import { createArtInstallation } from "./artInstallation.js"
@@ -63,25 +66,49 @@ async function init() {
   // Create controls
   controls = createControls(renderer.domElement)
 
-  // Load textures
-  await loadInitialTextures()
-
   // Create uniforms for dynamic control
   smokeAmountUniform = uniform(params.smokeAmount)
   volumetricLightingIntensity = uniform(params.bloomIntensity)
 
-  // Create glass material
-  const glassMaterial = createGlassMaterial(
-    getStainedGlassTexture(),
-    getNormalMapTexture(),
-    getMetallicRoughnessTexture(),
-    getCausticMap(),
-    smokeAmountUniform
-  )
+  // Load textures based on mode
+  let glassMaterial = null
+  let castleRegenerateCallback = null
 
-  // Create panel geometry and initial layout
-  createPanelGeometry(params.panelWidth)
-  updatePanelLayout(scene, glassMaterial, params)
+  if (params.useCastle) {
+    // Castle mode: load all texture sets and create multiple materials
+    await loadAllTextureSets()
+    // Also load initial textures for caustic map
+    await loadInitialTextures()
+
+    // Create materials for all windows
+    const windowMaterials = createAllWindowMaterials(smokeAmountUniform)
+
+    // Generate the castle with stained glass windows
+    generateCastle(scene, windowMaterials, castleParams)
+
+    // Callback to regenerate castle when params change
+    castleRegenerateCallback = () => {
+      generateCastle(scene, getWindowMaterials(), castleParams)
+    }
+
+    // Use first material as reference for tweakpane glass controls
+    glassMaterial = windowMaterials[0] || null
+  } else {
+    // Legacy mode: single texture, flat panels
+    await loadInitialTextures()
+
+    glassMaterial = createGlassMaterial(
+      getStainedGlassTexture(),
+      getNormalMapTexture(),
+      getMetallicRoughnessTexture(),
+      getCausticMap(),
+      smokeAmountUniform
+    )
+
+    // Create panel geometry and initial layout
+    createPanelGeometry(params.panelWidth)
+    updatePanelLayout(scene, glassMaterial, params)
+  }
 
   // Create scene objects
   createGround(scene)
@@ -112,7 +139,8 @@ async function init() {
     smokeAmountUniform,
     volumetricLightingIntensity,
     handController,
-    parameterMapper
+    parameterMapper,
+    castleRegenerateCallback
   )
 
   // Initialize UI toggle with "/" key

@@ -7,6 +7,9 @@ let normalMapTexture = null
 let metallicRoughnessTexture = null
 let causticMap = null
 
+// All texture sets loaded for multi-window support
+let allTextureSets = []
+
 export function getTextureLoader() {
   if (!textureLoader) {
     textureLoader = new THREE.TextureLoader()
@@ -122,4 +125,66 @@ export function getMetallicRoughnessTexture() {
 
 export function getCausticMap() {
   return causticMap
+}
+
+// Load all texture sets for multi-window support
+export async function loadAllTextureSets() {
+  const loader = getTextureLoader()
+  const setNames = Object.keys(textureSets)
+
+  allTextureSets = await Promise.all(
+    setNames.map(async (name) => {
+      const set = textureSets[name]
+      const result = { name }
+
+      // Load diffuse texture
+      result.diffuse = await loader.loadAsync(set.diffuse)
+      result.diffuse.colorSpace = THREE.SRGBColorSpace
+      result.diffuse.wrapS = result.diffuse.wrapT = THREE.ClampToEdgeWrapping
+
+      // Capture image dimensions and calculate aspect ratio
+      const img = result.diffuse.image
+      result.width = img.width
+      result.height = img.height
+      result.aspectRatio = img.width / img.height
+
+      // Load normal map if available
+      if (set.normal) {
+        result.normal = await loader.loadAsync(set.normal)
+        result.normal.wrapS = result.normal.wrapT = THREE.ClampToEdgeWrapping
+      } else {
+        result.normal = null
+      }
+
+      // Load metallicRoughness map if available
+      if (set.metallicRoughness) {
+        result.metallicRoughness = await loader.loadAsync(set.metallicRoughness)
+        result.metallicRoughness.wrapS = result.metallicRoughness.wrapT = THREE.ClampToEdgeWrapping
+      } else {
+        result.metallicRoughness = null
+      }
+
+      return result
+    })
+  )
+
+  return allTextureSets
+}
+
+// Get a texture set by index
+export function getTextureSetByIndex(index) {
+  if (index < 0 || index >= allTextureSets.length) {
+    return allTextureSets[0] || null
+  }
+  return allTextureSets[index]
+}
+
+// Get all loaded texture sets
+export function getAllTextureSets() {
+  return allTextureSets
+}
+
+// Get texture set count
+export function getTextureSetCount() {
+  return allTextureSets.length
 }
