@@ -39,7 +39,9 @@ let pane = null
 let handController = null
 let parameterMapper = null
 let postProcessing
-let glassPanel, glassMaterial
+let glassPanels = [] // Array of panel meshes
+let glassMaterial
+let panelGeometry
 let spotLight
 let volumetricMesh
 
@@ -70,8 +72,15 @@ const textureSets = {
 const urlParams = new URLSearchParams(window.location.search)
 const initialTexture = urlParams.get("texture") || "Solar Windmill"
 
+// Count available texture sets
+const numTextureSets = Object.keys(textureSets).length
+
 const params = {
   texture: initialTexture,
+  // Panel layout
+  numPanels: 1,
+  panelGap: 0.1,
+  panelWidth: 0.8,
   // Fog & Bloom
   smokeAmount: 4,
   bloomIntensity: 0.3,
@@ -83,6 +92,32 @@ const params = {
 let smokeAmountUniform, volumetricLightingIntensity
 let stainedGlassTexture, normalMapTexture, metallicRoughnessTexture
 let textureLoader
+
+// Update panel layout - creates/removes panels based on count
+function updatePanelLayout(count) {
+  // Remove existing panels from scene
+  glassPanels.forEach((panel) => {
+    scene.remove(panel)
+  })
+  glassPanels = []
+
+  // Don't create panels if count is 0
+  if (count === 0) return
+
+  // Calculate layout: panels arranged in a row with gaps
+  const { panelWidth, panelGap } = params
+  const totalWidth = count * panelWidth + (count - 1) * panelGap
+  const startX = -totalWidth / 2 + panelWidth / 2
+
+  for (let i = 0; i < count; i++) {
+    const panel = new THREE.Mesh(panelGeometry, glassMaterial)
+    panel.position.set(startX + i * (panelWidth + panelGap), 1.0, 0)
+    panel.rotation.x = -Math.PI / 2 // Horizontal, facing up
+    panel.castShadow = true
+    scene.add(panel)
+    glassPanels.push(panel)
+  }
+}
 
 init()
 
@@ -260,13 +295,11 @@ async function init() {
     )
   })()
 
-  // Glass panel - horizontal, between light and ground
-  const panelGeometry = new THREE.PlaneGeometry(0.8, 0.8)
-  glassPanel = new THREE.Mesh(panelGeometry, glassMaterial)
-  glassPanel.position.set(0, 1.0, 0)
-  glassPanel.rotation.x = -Math.PI / 2 // Horizontal, facing up
-  glassPanel.castShadow = true
-  scene.add(glassPanel)
+  // Glass panel geometry (shared by all panels for efficiency)
+  panelGeometry = new THREE.PlaneGeometry(params.panelWidth, params.panelWidth)
+
+  // Create initial panel layout
+  updatePanelLayout(params.numPanels)
 
   // Ground plane to receive the colored caustic shadows
   const groundGeometry = new THREE.PlaneGeometry(4, 4)
@@ -487,6 +520,31 @@ function setupTweakpane() {
       }
 
       glassMaterial.needsUpdate = true
+    })
+
+  // Panel Layout folder
+  const layoutFolder = pane.addFolder({ title: "Panel Layout" })
+
+  layoutFolder
+    .addBinding(params, "numPanels", {
+      min: 0,
+      max: numTextureSets,
+      step: 1,
+      label: "Number of Panels"
+    })
+    .on("change", (ev) => {
+      updatePanelLayout(ev.value)
+    })
+
+  layoutFolder
+    .addBinding(params, "panelGap", {
+      min: 0,
+      max: 0.5,
+      step: 0.01,
+      label: "Gap Between"
+    })
+    .on("change", () => {
+      updatePanelLayout(params.numPanels)
     })
 
   // Glass parameters from separate module

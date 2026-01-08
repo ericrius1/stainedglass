@@ -1,53 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <title>Stained Glass Volumetric Caustics</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+    />
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: #fff;
-            font-family: sans-serif;
-            font-size: 14px;
-            z-index: 100;
-        }
-        #hand-video {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            width: 160px;
-            height: 120px;
-            border: 2px solid #333;
-            border-radius: 4px;
-            z-index: 100;
-            transform: scaleX(-1);
-            display: none;
-        }
-        #hand-status {
-            position: absolute;
-            bottom: 140px;
-            left: 10px;
-            color: #fff;
-            font-family: sans-serif;
-            font-size: 12px;
-            z-index: 100;
-            background: rgba(0,0,0,0.5);
-            padding: 4px 8px;
-            border-radius: 4px;
-            display: none;
-        }
-        #hand-status.detected { color: #4f4; }
-        #hand-status.not-detected { color: #f44; }
+      body {
+        margin: 0;
+        background: #000;
+        overflow: hidden;
+      }
+      #info {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        color: #fff;
+        font-family: sans-serif;
+        font-size: 14px;
+        z-index: 100;
+      }
+      #hand-video {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        width: 160px;
+        height: 120px;
+        border: 2px solid #333;
+        border-radius: 4px;
+        z-index: 100;
+        transform: scaleX(-1);
+        display: none;
+      }
+      #hand-status {
+        position: absolute;
+        bottom: 140px;
+        left: 10px;
+        color: #fff;
+        font-family: sans-serif;
+        font-size: 12px;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 4px 8px;
+        border-radius: 4px;
+        display: none;
+      }
+      #hand-status.detected {
+        color: #4f4;
+      }
+      #hand-status.not-detected {
+        color: #f44;
+      }
     </style>
-</head>
-<body>
-    <div id="info">Stained Glass Volumetric Caustics</div>
+  </head>
+  <body>
     <video id="hand-video" autoplay playsinline></video>
     <div id="hand-status">Hand: Not Detected</div>
     <script type="module" src="/src/main.js"></script>
-</body>
+  </body>
 </html>
