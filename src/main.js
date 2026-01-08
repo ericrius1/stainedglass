@@ -60,7 +60,9 @@ const textureSets = {
   },
   Eagle: {
     diffuse: "/textures/stainedglass/eagle/eagle_diffuse.jpg",
-    normal: "/textures/stainedglass/eagle/eagle_normal.jpg"
+    normal: "/textures/stainedglass/eagle/eagle_normal.jpg",
+    metallicRoughness:
+      "/textures/stainedglass/eagle/eagle_metallicRoughness.jpg"
   }
 }
 
@@ -79,7 +81,7 @@ const params = {
 }
 
 let smokeAmountUniform, volumetricLightingIntensity
-let stainedGlassTexture, normalMapTexture
+let stainedGlassTexture, normalMapTexture, metallicRoughnessTexture
 let textureLoader
 
 init()
@@ -113,6 +115,15 @@ async function init() {
   if (initialSet.normal) {
     normalMapTexture = await textureLoader.loadAsync(initialSet.normal)
     normalMapTexture.wrapS = normalMapTexture.wrapT = THREE.ClampToEdgeWrapping
+  }
+
+  // Load metallicRoughness map if available
+  if (initialSet.metallicRoughness) {
+    metallicRoughnessTexture = await textureLoader.loadAsync(
+      initialSet.metallicRoughness
+    )
+    metallicRoughnessTexture.wrapS = metallicRoughnessTexture.wrapT =
+      THREE.ClampToEdgeWrapping
   }
 
   // Caustic pattern texture for light refraction pattern
@@ -231,6 +242,12 @@ async function init() {
       glassParams.normalStrength,
       glassParams.normalStrength
     )
+  }
+
+  // Apply metallicRoughness map if available (same texture for both channels)
+  if (metallicRoughnessTexture) {
+    glassMaterial.roughnessMap = metallicRoughnessTexture
+    glassMaterial.metalnessMap = metallicRoughnessTexture
   }
 
   // This is the key - castShadowNode projects the colors through the shadow
@@ -444,6 +461,29 @@ function setupTweakpane() {
         // Remove normal map if this set doesn't have one
         glassMaterial.normalMap = null
         normalMapTexture = null
+      }
+
+      // Handle metallicRoughness map
+      if (set.metallicRoughness) {
+        const newMetallicRoughness = await textureLoader.loadAsync(
+          set.metallicRoughness
+        )
+        newMetallicRoughness.wrapS = newMetallicRoughness.wrapT =
+          THREE.ClampToEdgeWrapping
+
+        if (metallicRoughnessTexture) {
+          metallicRoughnessTexture.source = newMetallicRoughness.source
+          metallicRoughnessTexture.needsUpdate = true
+        } else {
+          metallicRoughnessTexture = newMetallicRoughness
+        }
+        glassMaterial.roughnessMap = metallicRoughnessTexture
+        glassMaterial.metalnessMap = metallicRoughnessTexture
+      } else {
+        // Remove metallicRoughness maps if this set doesn't have one
+        glassMaterial.roughnessMap = null
+        glassMaterial.metalnessMap = null
+        metallicRoughnessTexture = null
       }
 
       glassMaterial.needsUpdate = true
