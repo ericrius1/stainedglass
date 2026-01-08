@@ -2,21 +2,11 @@ import * as THREE from "three/webgpu"
 import {
   Fn,
   vec3,
-  vec4,
   float,
   time,
   frameId,
   screenCoordinate,
-  texture3D,
-  positionWorld,
-  cameraPosition,
-  normalize,
-  mix,
-  smoothstep,
-  clamp,
-  abs,
-  exp,
-  dot
+  texture3D
 } from "three/tsl"
 import { ImprovedNoise } from "three/examples/jsm/math/ImprovedNoise.js"
 import { bayer16 } from "three/examples/jsm/tsl/math/Bayer.js"
@@ -39,6 +29,7 @@ export function createNoise3DTexture() {
         const noiseValue = perlin.noise(nx * scale, ny * scale, nz * scale)
         data[i] = 128 + 128 * noiseValue
         i++
+        
       }
     }
   }
@@ -54,14 +45,15 @@ export function createNoise3DTexture() {
   return tex
 }
 
-// Creates volumetric material for fog with light beam effects
+// Creates volumetric material for fog - matching official Three.js example
 export function createVolumetricMaterial(noiseTexture3D, smokeAmountUniform) {
   const volumetricMaterial = new THREE.VolumeNodeMaterial()
-  volumetricMaterial.steps = 32
+  volumetricMaterial.steps = 20 // Match official example
   volumetricMaterial.offsetNode = bayer16(screenCoordinate.add(frameId))
 
   volumetricMaterial.scatteringNode = Fn(({ positionRay }) => {
-    const timeScaled = vec3(time.mul(0.015), time.mul(0.005), time.mul(0.02))
+    // Time-based animation for fog movement (from official example)
+    const timeScaled = vec3(time.mul(0.01), float(0), time.mul(0.03))
 
     const sampleGrain = (scale, timeScale = 1) =>
       texture3D(
@@ -70,29 +62,13 @@ export function createVolumetricMaterial(noiseTexture3D, smokeAmountUniform) {
         0
       ).r.add(0.5)
 
-    // Multi-octave noise for organic fog
+    // Multi-octave noise for organic fog (matching official example)
     let density = sampleGrain(1)
-    density = density.mul(sampleGrain(0.5, 0.8))
-    density = density.mul(sampleGrain(0.25, 1.5))
+    density = density.mul(sampleGrain(0.5, 1))
+    density = density.mul(sampleGrain(0.2, 2))
 
-    // Light beam effect - simulate light rays from above (spotlight at y=2.5)
-    const lightPos = vec3(0, 2.5, 0)
-    const lightDir = normalize(lightPos.sub(positionRay))
-
-    // Vertical light beam falloff - stronger at center, fades outward
-    const horizontalDist = positionRay.xz.length()
-    const beamFalloff = exp(horizontalDist.negate().mul(1.5))
-
-    // Height-based intensity - brightest near light source
-    const heightFactor = smoothstep(float(0), float(2.0), positionRay.y)
-
-    // Combined light contribution
-    const lightContribution = beamFalloff.mul(heightFactor).mul(0.8)
-
-    // Add light beams to density
-    const finalDensity = density.add(lightContribution.mul(density))
-
-    return smokeAmountUniform.mix(1, finalDensity)
+    // smokeAmount controls fog density blend
+    return smokeAmountUniform.mix(1, density)
   })
 
   return volumetricMaterial

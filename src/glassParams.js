@@ -45,17 +45,17 @@ function updateAllIridescenceThickness(min, max) {
 // Glass style parameters - all the knobs for exploring different glass aesthetics
 export const glassParams = {
   // === Caustic Projection ===
-  causticIntensity: 80,
-  causticScale: 0.8,
-  chromaticAberration: 0.006,
-  causticOcclusion: 2.0,
+  causticIntensity: 60, // Match official Three.js example
+  causticScale: 0.6,
+  chromaticAberration: 0.004, // Match official example
+  causticOcclusion: 1.0,
   refractionStrength: 0.6,
 
   // === Caustic IOR (for shadow projection) ===
   causticIOR: 1.5,
 
   // === Glass Panel Emissive ===
-  glassEmissive: 1.2,
+  glassEmissive: 1.0,
   normalStrength: 1.0,
 
   // === Physical Glass Properties ===
@@ -98,13 +98,13 @@ export const glassParams = {
 
 // Uniforms for TSL shaders - initialize from glassParams
 export const glassUniforms = {
-  causticIntensity: uniform(80),
-  causticScale: uniform(0.8),
-  chromaticAberration: uniform(0.006),
-  causticOcclusion: uniform(2.0),
+  causticIntensity: uniform(60),
+  causticScale: uniform(0.6),
+  chromaticAberration: uniform(0.004),
+  causticOcclusion: uniform(1.0),
   refractionStrength: uniform(0.6),
   causticIOR: uniform(1.5),
-  glassEmissive: uniform(1.2)
+  glassEmissive: uniform(1.0)
 }
 
 // Setup Tweakpane bindings for glass parameters

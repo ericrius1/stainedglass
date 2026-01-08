@@ -13,20 +13,20 @@ export function createPostProcessing(renderer, scene, camera, volumetricMaterial
   volumetricLayer.disableAll()
   volumetricLayer.enable(LAYER_VOLUMETRIC_LIGHTING)
 
-  // Scene Pass
+  // Scene Pass - main render
   const scenePass = pass(scene, camera)
   const sceneDepth = scenePass.getTextureNode("depth")
 
   // Apply depth occlusion to volumetric material
   volumetricMaterial.depthNode = sceneDepth.sample(screenUV)
 
-  // Volumetric Lighting Pass
+  // Volumetric Lighting Pass (official example uses 0.5 resolution)
   const volumetricPass = pass(scene, camera, { depthBuffer: false, samples: 0 })
   volumetricPass.setLayers(volumetricLayer)
-  volumetricPass.setResolutionScale(0.75)
+  volumetricPass.setResolutionScale(0.5)
 
-  // Bloom on volumetric pass - lower threshold to capture more light
-  const bloomPass = bloom(volumetricPass, 0.3, 0.6, 0)
+  // Bloom on volumetric pass - match official example: bloom(pass, 1, 1, 0)
+  const bloomPass = bloom(volumetricPass, 1, 1, 0)
 
   // Compose final output
   const scenePassColor = scenePass.add(

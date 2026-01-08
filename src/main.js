@@ -2,7 +2,7 @@ import { uniform } from "three/tsl"
 import { defaultParams } from "./config.js"
 
 // Core modules
-import { createRenderer, resizeRenderer } from "./core/renderer.js"
+import { createRenderer, resizeRenderer, initRenderer } from "./core/renderer.js"
 import {
   createScene,
   createCamera,
@@ -33,8 +33,7 @@ import { createSpotLight } from "./scene/lighting.js"
 import { createFogVolume, getVolumetricMaterial } from "./scene/fogVolume.js"
 import { generateCastle, castleParams } from "./scene/castleGenerator.js"
 
-// Art installation
-import { createArtInstallation } from "./artInstallation.js"
+// Glass parameters
 import { glassParams, glassUniforms } from "./glassParams.js"
 
 // Hand tracking
@@ -62,6 +61,9 @@ async function init() {
   scene = createScene()
   camera = createCamera()
   renderer = createRenderer()
+
+  // Initialize WebGPU renderer (required before rendering)
+  await initRenderer()
 
   // Create controls
   controls = createControls(renderer.domElement)
@@ -113,7 +115,7 @@ async function init() {
   // Create scene objects
   createGround(scene)
   createSpotLight(scene)
-  createArtInstallation(scene)
+  // createArtInstallation(scene) // Disabled - was causing white artifact
 
   // Create volumetric fog
   const { volumetricMaterial } = createFogVolume(scene, params, smokeAmountUniform)

@@ -37,266 +37,104 @@ function createStoneMaterial() {
   if (stoneMaterial) return stoneMaterial
 
   stoneMaterial = new THREE.MeshStandardMaterial({
-    color: 0x6b6b6b,
-    roughness: 0.9,
-    metalness: 0.1,
-    flatShading: true
+    color: 0x5a5a5a,
+    roughness: 0.85,
+    metalness: 0.05
   })
   return stoneMaterial
 }
 
-// Create a low-poly cylindrical tower
-function createTower(rng, params, index, totalTowers) {
+// Create a corner pillar/buttress
+function createPillar(height, radius = 0.08) {
   const group = new THREE.Group()
 
-  // Tower body - octagonal prism for low-poly look
-  const segments = 8
-  const bodyGeometry = new THREE.CylinderGeometry(
-    params.towerRadius,
-    params.towerRadius * 1.1, // Slight taper
-    params.towerHeight,
-    segments
-  )
-  const body = new THREE.Mesh(bodyGeometry, createStoneMaterial())
-  body.position.y = params.towerHeight / 2
-  body.castShadow = true
-  body.receiveShadow = true
-  group.add(body)
+  // Main pillar body
+  const pillarGeometry = new THREE.CylinderGeometry(radius, radius * 1.1, height, 8)
+  const pillar = new THREE.Mesh(pillarGeometry, createStoneMaterial())
+  pillar.position.y = height / 2
+  pillar.castShadow = true
+  pillar.receiveShadow = true
+  group.add(pillar)
 
-  // Tower top platform
-  const platformGeometry = new THREE.CylinderGeometry(
-    params.towerRadius * 1.2,
-    params.towerRadius * 1.2,
-    params.crenelationHeight,
-    segments
-  )
-  const platform = new THREE.Mesh(platformGeometry, createStoneMaterial())
-  platform.position.y = params.towerHeight + params.crenelationHeight / 2
-  platform.castShadow = true
-  platform.receiveShadow = true
-  group.add(platform)
-
-  // Crenelations (battlements) on top
-  const crenelCount = Math.max(4, segments)
-  for (let i = 0; i < crenelCount; i++) {
-    if (i % 2 === 0) {
-      // Only add every other one for gaps
-      const angle = (i / crenelCount) * Math.PI * 2
-      const crenelGeometry = new THREE.BoxGeometry(
-        params.towerRadius * 0.4,
-        params.crenelationHeight * 1.5,
-        params.towerRadius * 0.25
-      )
-      const crenel = new THREE.Mesh(crenelGeometry, createStoneMaterial())
-      crenel.position.set(
-        Math.cos(angle) * params.towerRadius * 1.1,
-        params.towerHeight + params.crenelationHeight * 1.5,
-        Math.sin(angle) * params.towerRadius * 1.1
-      )
-      crenel.rotation.y = angle
-      crenel.castShadow = true
-      group.add(crenel)
-    }
-  }
-
-  // Conical roof with random height variation
-  const roofHeight = params.towerRadius * rng.range(1.5, 2.5)
-  const roofGeometry = new THREE.ConeGeometry(
-    params.towerRadius * 1.3,
-    roofHeight,
-    segments
-  )
-  const roofMaterial = new THREE.MeshStandardMaterial({
-    color: 0x4a3728,
-    roughness: 0.8,
-    metalness: 0.1,
-    flatShading: true
-  })
-  const roof = new THREE.Mesh(roofGeometry, roofMaterial)
-  roof.position.y =
-    params.towerHeight + params.crenelationHeight * 2 + roofHeight / 2
-  roof.castShadow = true
-  group.add(roof)
+  // Decorative cap
+  const capGeometry = new THREE.ConeGeometry(radius * 1.3, radius * 2, 8)
+  const cap = new THREE.Mesh(capGeometry, createStoneMaterial())
+  cap.position.y = height + radius
+  cap.castShadow = true
+  group.add(cap)
 
   return group
 }
 
-// Create a wall segment between two points
-function createWall(params, start, end, addCrenelations = true) {
+// Create a wall section with an embedded window opening
+function createWallWithWindow(windowWidth, windowHeight, wallHeight, wallThickness, windowYOffset) {
   const group = new THREE.Group()
 
-  const dx = end.x - start.x
-  const dz = end.z - start.z
-  const length = Math.sqrt(dx * dx + dz * dz)
-  const angle = Math.atan2(dz, dx)
+  // Calculate wall segment widths around the window
+  const margin = 0.06 // Stone margin around window
+  const totalWidth = windowWidth + margin * 2
 
-  // Main wall
-  const wallGeometry = new THREE.BoxGeometry(
-    length,
-    params.wallHeight,
-    params.wallThickness
-  )
-  const wall = new THREE.Mesh(wallGeometry, createStoneMaterial())
-  wall.position.set(
-    (start.x + end.x) / 2,
-    params.wallHeight / 2,
-    (start.z + end.z) / 2
-  )
-  wall.rotation.y = -angle
-  wall.castShadow = true
-  wall.receiveShadow = true
-  group.add(wall)
+  // Stone frame around the window (archway style)
+  const frameThickness = 0.03
 
-  // Add crenelations along the wall
-  if (addCrenelations) {
-    const crenelSpacing = length / params.crenelationCount
-    for (let i = 0; i < params.crenelationCount; i++) {
-      if (i % 2 === 0) {
-        const t = (i + 0.5) / params.crenelationCount
-        const crenelGeometry = new THREE.BoxGeometry(
-          crenelSpacing * 0.6,
-          params.crenelationHeight,
-          params.wallThickness * 1.2
-        )
-        const crenel = new THREE.Mesh(crenelGeometry, createStoneMaterial())
-        crenel.position.set(
-          start.x + dx * t,
-          params.wallHeight + params.crenelationHeight / 2,
-          start.z + dz * t
-        )
-        crenel.rotation.y = -angle
-        crenel.castShadow = true
-        group.add(crenel)
-      }
-    }
+  // Bottom section (below window)
+  const bottomHeight = windowYOffset - windowHeight / 2
+  if (bottomHeight > 0.01) {
+    const bottomGeometry = new THREE.BoxGeometry(totalWidth, bottomHeight, wallThickness)
+    const bottom = new THREE.Mesh(bottomGeometry, createStoneMaterial())
+    bottom.position.y = bottomHeight / 2
+    bottom.castShadow = true
+    bottom.receiveShadow = true
+    group.add(bottom)
   }
 
-  return group
+  // Top section (above window)
+  const topStart = windowYOffset + windowHeight / 2
+  const topHeight = wallHeight - topStart
+  if (topHeight > 0.01) {
+    const topGeometry = new THREE.BoxGeometry(totalWidth, topHeight, wallThickness)
+    const top = new THREE.Mesh(topGeometry, createStoneMaterial())
+    top.position.y = topStart + topHeight / 2
+    top.castShadow = true
+    top.receiveShadow = true
+    group.add(top)
+  }
+
+  // Left pillar section
+  const leftGeometry = new THREE.BoxGeometry(margin, windowHeight, wallThickness)
+  const left = new THREE.Mesh(leftGeometry, createStoneMaterial())
+  left.position.set(-windowWidth / 2 - margin / 2, windowYOffset, 0)
+  left.castShadow = true
+  left.receiveShadow = true
+  group.add(left)
+
+  // Right pillar section
+  const rightGeometry = new THREE.BoxGeometry(margin, windowHeight, wallThickness)
+  const right = new THREE.Mesh(rightGeometry, createStoneMaterial())
+  right.position.set(windowWidth / 2 + margin / 2, windowYOffset, 0)
+  right.castShadow = true
+  right.receiveShadow = true
+  group.add(right)
+
+  // Decorative arch above window
+  const archHeight = 0.04
+  const archGeometry = new THREE.BoxGeometry(windowWidth + frameThickness * 2, archHeight, wallThickness + 0.01)
+  const arch = new THREE.Mesh(archGeometry, createStoneMaterial())
+  arch.position.set(0, windowYOffset + windowHeight / 2 + archHeight / 2, 0)
+  arch.castShadow = true
+  group.add(arch)
+
+  // Window sill
+  const sillGeometry = new THREE.BoxGeometry(windowWidth + frameThickness * 2, 0.02, wallThickness + 0.02)
+  const sill = new THREE.Mesh(sillGeometry, createStoneMaterial())
+  sill.position.set(0, windowYOffset - windowHeight / 2 - 0.01, 0)
+  sill.castShadow = true
+  group.add(sill)
+
+  return { group, totalWidth }
 }
 
-// Create a window opening with frame
-// windowWidth and windowHeight can be overridden based on texture aspect ratio
-function createWindow(params, position, rotation, index, customWidth = null, customHeight = null) {
-  const group = new THREE.Group()
-
-  // Use custom dimensions if provided, otherwise use params
-  const windowWidth = customWidth !== null ? customWidth : params.windowWidth
-  const windowHeight = customHeight !== null ? customHeight : params.windowHeight
-
-  const frameWidth = 0.015 // Width of the frame border
-  const frameDepth = 0.02
-
-  const frameMaterial = new THREE.MeshStandardMaterial({
-    color: 0x2a2a2a,
-    roughness: 0.6,
-    metalness: 0.4,
-    flatShading: true
-  })
-
-  // Create frame as 4 separate bars instead of solid box
-  // Top bar
-  const topBar = new THREE.Mesh(
-    new THREE.BoxGeometry(windowWidth + frameWidth * 2, frameWidth, frameDepth),
-    frameMaterial
-  )
-  topBar.position.y = windowHeight / 2 + frameWidth / 2
-  topBar.castShadow = true
-  group.add(topBar)
-
-  // Bottom bar
-  const bottomBar = new THREE.Mesh(
-    new THREE.BoxGeometry(windowWidth + frameWidth * 2, frameWidth, frameDepth),
-    frameMaterial
-  )
-  bottomBar.position.y = -windowHeight / 2 - frameWidth / 2
-  bottomBar.castShadow = true
-  group.add(bottomBar)
-
-  // Left bar
-  const leftBar = new THREE.Mesh(
-    new THREE.BoxGeometry(frameWidth, windowHeight, frameDepth),
-    frameMaterial
-  )
-  leftBar.position.x = -windowWidth / 2 - frameWidth / 2
-  leftBar.castShadow = true
-  group.add(leftBar)
-
-  // Right bar
-  const rightBar = new THREE.Mesh(
-    new THREE.BoxGeometry(frameWidth, windowHeight, frameDepth),
-    frameMaterial
-  )
-  rightBar.position.x = windowWidth / 2 + frameWidth / 2
-  rightBar.castShadow = true
-  group.add(rightBar)
-
-  // Glass panel geometry sized to texture aspect ratio
-  const glassGeometry = new THREE.PlaneGeometry(windowWidth, windowHeight)
-
-  // Store geometry and transform info for later material assignment
-  const windowData = {
-    geometry: glassGeometry,
-    position: position.clone(),
-    rotation: rotation,
-    index: index,
-    width: windowWidth,
-    height: windowHeight,
-    mesh: null
-  }
-
-  group.position.copy(position)
-  group.rotation.y = rotation
-
-  return { group, windowData }
-}
-
-// Calculate window positions around the castle
-function calculateWindowPositions(rng, params) {
-  const positions = []
-  const numWindows = numTextureSets
-
-  // Distribute windows across towers and walls
-  // Prefer tower windows for best visibility
-  const towerPositions = []
-  for (let i = 0; i < params.towerCount; i++) {
-    const angle = (i / params.towerCount) * Math.PI * 2
-    towerPositions.push({
-      x: Math.cos(angle) * params.baseRadius,
-      z: Math.sin(angle) * params.baseRadius,
-      angle: angle
-    })
-  }
-
-  // Place windows on towers first, facing outward
-  for (let i = 0; i < numWindows; i++) {
-    const towerIndex = i % params.towerCount
-    const tower = towerPositions[towerIndex]
-
-    // Window faces outward from castle center
-    const outwardAngle = tower.angle
-    // Position window on outer surface of tower
-    const windowOffset = params.towerRadius + 0.01
-
-    // Vary height for visual interest
-    const heightVariation = rng.range(0.4, 0.7)
-
-    positions.push({
-      position: new THREE.Vector3(
-        tower.x + Math.cos(outwardAngle) * windowOffset,
-        params.towerHeight * heightVariation,
-        tower.z + Math.sin(outwardAngle) * windowOffset
-      ),
-      // PlaneGeometry faces +Z by default
-      // To face outward direction (cos(α), 0, sin(α)), rotate by (π/2 - α)
-      // This makes the plane's +Z axis align with the outward direction
-      rotation: Math.PI / 2 - outwardAngle
-    })
-  }
-
-  return positions
-}
-
-// Generate the complete castle
+// Generate the complete castle - windows embedded in walls facing outward
 export function generateCastle(sceneRef, materials, params = castleParams) {
   scene = sceneRef
 
@@ -312,119 +150,176 @@ export function generateCastle(sceneRef, materials, params = castleParams) {
   castleGroup = new THREE.Group()
   const rng = new SeededRandom(params.seed)
 
-  // Generate tower positions
-  const towerPositions = []
-  for (let i = 0; i < params.towerCount; i++) {
-    const angle = (i / params.towerCount) * Math.PI * 2 + rng.range(-0.1, 0.1)
-    const radiusVariation = params.baseRadius * rng.range(0.9, 1.1)
-    towerPositions.push({
-      x: Math.cos(angle) * radiusVariation,
-      z: Math.sin(angle) * radiusVariation,
-      angle: angle
-    })
-  }
-
-  // Create towers
-  towerPositions.forEach((pos, i) => {
-    const tower = createTower(rng, params, i, params.towerCount)
-    tower.position.set(pos.x, 0, pos.z)
-    castleGroup.add(tower)
-  })
-
-  // Create walls between towers
-  for (let i = 0; i < params.towerCount; i++) {
-    const start = towerPositions[i]
-    const end = towerPositions[(i + 1) % params.towerCount]
-    const wall = createWall(params, start, end)
-    castleGroup.add(wall)
-  }
-
-  // Create central keep (larger tower in center)
-  const keepParams = {
-    ...params,
-    towerRadius: params.towerRadius * 1.5,
-    towerHeight: params.towerHeight * 1.3
-  }
-  const keep = createTower(rng, keepParams, 0, 1)
-  keep.position.set(0, 0, 0)
-  castleGroup.add(keep)
-
-  // Calculate window positions
-  const windowPositions = calculateWindowPositions(rng, params)
-
   // Get texture sets for aspect ratio information
   const textureSets = getAllTextureSets()
+  const numWindows = Math.min(numTextureSets, textureSets.length)
 
-  // Create windows with glass panels
-  windowPositions.forEach((winPos, index) => {
-    // Calculate window dimensions based on texture aspect ratio
-    let windowWidth = params.windowWidth
-    let windowHeight = params.windowHeight
+  // Calculate window dimensions for each texture
+  const windowDimensions = []
+  for (let i = 0; i < numWindows; i++) {
+    const textureAspect = textureSets[i]?.aspectRatio || 1
+    let width, height
 
-    // If we have texture info, use its aspect ratio
-    if (textureSets && textureSets[index]) {
-      const textureAspect = textureSets[index].aspectRatio || 1
-      // Keep the base window area roughly constant but adjust for aspect ratio
-      const baseArea = params.windowWidth * params.windowHeight
-      // For tall textures (aspect < 1), make window taller
-      // For wide textures (aspect > 1), make window wider
-      if (textureAspect >= 1) {
-        // Wide texture: scale width up, keep height
-        windowWidth = params.windowHeight * textureAspect
-        windowHeight = params.windowHeight
-      } else {
-        // Tall texture: keep width, scale height up
-        windowWidth = params.windowWidth
-        windowHeight = params.windowWidth / textureAspect
-      }
-      // Clamp to reasonable bounds
-      windowWidth = Math.min(windowWidth, 0.5)
-      windowHeight = Math.min(windowHeight, 0.6)
+    // Base size - larger windows for better visibility
+    const baseSize = 0.4
+
+    if (textureAspect >= 1) {
+      // Wide texture
+      width = Math.min(baseSize * textureAspect, 0.7)
+      height = width / textureAspect
+    } else {
+      // Tall texture
+      height = Math.min(baseSize / textureAspect, 0.8)
+      width = height * textureAspect
     }
 
-    const { group: windowGroup, windowData } = createWindow(
-      params,
-      winPos.position,
-      winPos.rotation,
-      index,
-      windowWidth,
-      windowHeight
-    )
-    castleGroup.add(windowGroup)
+    windowDimensions.push({ width, height })
+  }
 
-    // Create glass mesh if materials provided
-    if (materials && materials[index]) {
-      const glassMesh = new THREE.Mesh(windowData.geometry, materials[index])
-      // Position glass at window location
-      glassMesh.position.copy(winPos.position)
-      glassMesh.rotation.y = winPos.rotation
+  // Arrange windows in a circular/polygonal layout
+  // Each window is in its own wall section facing outward
+  const radius = params.baseRadius * 1.2
+  const wallHeight = params.wallHeight * 1.5
+  const wallThickness = params.wallThickness * 1.2
+
+  // Create wall sections with windows
+  for (let i = 0; i < numWindows; i++) {
+    const angle = (i / numWindows) * Math.PI * 2
+    const nextAngle = ((i + 1) / numWindows) * Math.PI * 2
+
+    const dim = windowDimensions[i]
+    const windowYOffset = wallHeight * 0.5 // Center windows vertically
+
+    // Create wall section with window
+    const { group: wallSection, totalWidth } = createWallWithWindow(
+      dim.width,
+      dim.height,
+      wallHeight,
+      wallThickness,
+      windowYOffset
+    )
+
+    // Position wall section
+    const wallX = Math.cos(angle) * radius
+    const wallZ = Math.sin(angle) * radius
+    wallSection.position.set(wallX, 0, wallZ)
+    // Rotate to face outward (perpendicular to radius)
+    wallSection.rotation.y = -angle + Math.PI / 2
+    castleGroup.add(wallSection)
+
+    // Create glass panel
+    if (materials && materials[i]) {
+      const glassGeometry = new THREE.PlaneGeometry(dim.width, dim.height)
+      const glassMesh = new THREE.Mesh(glassGeometry, materials[i])
+
+      // Position glass in the window opening, slightly inset
+      const glassOffset = wallThickness / 2 + 0.001
+      glassMesh.position.set(
+        wallX + Math.cos(angle) * glassOffset,
+        windowYOffset,
+        wallZ + Math.sin(angle) * glassOffset
+      )
+      // Glass faces outward
+      glassMesh.rotation.y = -angle + Math.PI / 2
+
       glassMesh.castShadow = true
       glassMesh.receiveShadow = true
-      // Enable volumetric lighting layer so glass glow contributes to bloom
       glassMesh.layers.enable(LAYER_VOLUMETRIC_LIGHTING)
+
       castleGroup.add(glassMesh)
       windowMeshes.push(glassMesh)
     }
-  })
 
-  // Add base platform
+    // Add corner pillars between wall sections
+    const pillarAngle = (angle + nextAngle) / 2
+    const pillarRadius = radius + wallThickness / 2
+    const pillar = createPillar(wallHeight * 1.1)
+    pillar.position.set(
+      Math.cos(pillarAngle) * pillarRadius,
+      0,
+      Math.sin(pillarAngle) * pillarRadius
+    )
+    castleGroup.add(pillar)
+  }
+
+  // Add a simple circular base/foundation
   const baseGeometry = new THREE.CylinderGeometry(
-    params.baseRadius * 1.4,
-    params.baseRadius * 1.5,
-    0.15,
-    params.towerCount * 2
+    radius + wallThickness,
+    radius + wallThickness + 0.1,
+    0.1,
+    numWindows * 2
   )
   const base = new THREE.Mesh(baseGeometry, createStoneMaterial())
-  base.position.y = -0.075
+  base.position.y = -0.05
   base.receiveShadow = true
   castleGroup.add(base)
+
+  // Add inner floor that will receive the caustic projections
+  const floorGeometry = new THREE.CircleGeometry(radius - 0.1, 32)
+  const floorMaterial = new THREE.MeshStandardMaterial({
+    color: 0x3a3a3a,
+    roughness: 0.6,
+    metalness: 0.1
+  })
+  const floor = new THREE.Mesh(floorGeometry, floorMaterial)
+  floor.rotation.x = -Math.PI / 2
+  floor.position.y = 0.01
+  floor.receiveShadow = true
+  castleGroup.add(floor)
+
+  // Add central skylight - horizontal glass panel that light passes through
+  // This creates caustics on the floor below
+  if (materials && materials.length > 0) {
+    const skylightSize = 0.6
+    const skylightGeometry = new THREE.PlaneGeometry(skylightSize, skylightSize)
+    const skylightMaterial = materials[0] // Use first texture for skylight
+
+    const skylight = new THREE.Mesh(skylightGeometry, skylightMaterial)
+    skylight.rotation.x = -Math.PI / 2 // Face down/up
+    skylight.position.y = wallHeight * 0.8 // Above floor
+    skylight.castShadow = true
+    skylight.receiveShadow = false
+    skylight.layers.enable(LAYER_VOLUMETRIC_LIGHTING)
+    castleGroup.add(skylight)
+    windowMeshes.push(skylight)
+
+    // Add frame around skylight
+    const frameThickness = 0.02
+    const frameMaterial = new THREE.MeshStandardMaterial({
+      color: 0x2a2a2a,
+      roughness: 0.6,
+      metalness: 0.4
+    })
+    const frameGeometry = new THREE.BoxGeometry(skylightSize + frameThickness * 2, frameThickness, frameThickness)
+
+    // Four frame bars
+    const frameY = wallHeight * 0.8
+    const halfSize = skylightSize / 2 + frameThickness / 2
+
+    const frame1 = new THREE.Mesh(frameGeometry, frameMaterial)
+    frame1.position.set(0, frameY, halfSize)
+    castleGroup.add(frame1)
+
+    const frame2 = new THREE.Mesh(frameGeometry, frameMaterial)
+    frame2.position.set(0, frameY, -halfSize)
+    castleGroup.add(frame2)
+
+    const frameGeometry2 = new THREE.BoxGeometry(frameThickness, frameThickness, skylightSize + frameThickness * 2)
+    const frame3 = new THREE.Mesh(frameGeometry2, frameMaterial)
+    frame3.position.set(halfSize, frameY, 0)
+    castleGroup.add(frame3)
+
+    const frame4 = new THREE.Mesh(frameGeometry2, frameMaterial)
+    frame4.position.set(-halfSize, frameY, 0)
+    castleGroup.add(frame4)
+  }
 
   scene.add(castleGroup)
 
   return {
     group: castleGroup,
     windowMeshes: windowMeshes,
-    windowCount: numTextureSets
+    windowCount: numWindows
   }
 }
 

@@ -49,24 +49,24 @@ export const defaultParams = {
   // Fog & Bloom
   smokeAmount: 4,
   bloomIntensity: 1.2,
-  fogBoundsX: 4,
-  fogBoundsY: 2.5,
-  fogBoundsZ: 4,
+  fogBoundsX: 5,
+  fogBoundsY: 3,
+  fogBoundsZ: 5,
   // Castle mode
   useCastle: true
 }
 
 // Castle generator defaults
 export const defaultCastleParams = {
-  seed: Math.floor(Math.random() * 10000),
+  seed: 42, // Fixed seed for reproducible generation
   towerCount: 4,
-  towerRadius: 0.15,
-  towerHeight: 1.2,
-  wallHeight: 0.6,
-  wallThickness: 0.08,
-  baseRadius: 0.8,
-  windowHeight: 0.4,
-  windowWidth: 0.25,
-  crenelationHeight: 0.1,
-  crenelationCount: 8
+  towerRadius: 0.12,
+  towerHeight: 1.0,
+  wallHeight: 0.8,
+  wallThickness: 0.1,
+  baseRadius: 1.0,
+  windowHeight: 0.5,
+  windowWidth: 0.35,
+  crenelationHeight: 0.08,
+  crenelationCount: 6
 }
