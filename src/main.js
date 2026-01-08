@@ -1,5 +1,6 @@
+import * as THREE from "three/webgpu"
 import { uniform } from "three/tsl"
-import { defaultParams } from "./config.js"
+import { defaultParams, UI_VISIBLE_ON_START } from "./config.js"
 
 // Core modules
 import { createRenderer, resizeRenderer, initRenderer } from "./core/renderer.js"
@@ -8,7 +9,9 @@ import {
   createCamera,
   createControls,
   resizeCamera,
-  updateControls
+  updateControls,
+  setOrbitControlsEnabled,
+  setOrbitTarget
 } from "./core/scene.js"
 import { createPostProcessing, renderPostProcessing } from "./core/postProcessing.js"
 
@@ -31,7 +34,7 @@ import { createPanelGeometry, updatePanelLayout } from "./scene/panelLayout.js"
 import { createGround } from "./scene/ground.js"
 import { createSpotLight } from "./scene/lighting.js"
 import { createFogVolume, getVolumetricMaterial } from "./scene/fogVolume.js"
-import { generateCastle, castleParams } from "./scene/castleGenerator.js"
+import { generateCastle, castleParams, getCastleGroup } from "./scene/castleGenerator.js"
 
 // Glass parameters
 import { glassParams, glassUniforms } from "./glassParams.js"
@@ -40,16 +43,22 @@ import { glassParams, glassUniforms } from "./glassParams.js"
 import { HandTrackingController } from "./utils/HandTrackingController.js"
 import { ParameterMapper } from "./utils/ParameterMapper.js"
 
+// Player controller
+import { PlayerController } from "./controls/PlayerController.js"
+
 // UI
 import { createStats, updateStats } from "./ui/stats.js"
 import { createTweakpane } from "./ui/tweakpane.js"
-import { initUIToggle } from "./ui/uiToggle.js"
+import { initUIToggle, onUIToggle, isUIVisible } from "./ui/uiToggle.js"
 
 // Local state
 let renderer, scene, camera, controls
 let handController = null
 let parameterMapper = null
 let smokeAmountUniform, volumetricLightingIntensity
+let playerController = null
+let clock = new THREE.Clock()
+let debugMode = UI_VISIBLE_ON_START
 
 // Clone params so we can mutate locally
 const params = { ...defaultParams }
@@ -132,6 +141,16 @@ async function init() {
   // Initialize hand tracking
   await initHandTracking()
 
+  // Create player controller for FPS mode
+  playerController = new PlayerController(camera, renderer.domElement, scene)
+
+  // Build collision after a short delay to ensure castle is fully created
+  setTimeout(() => {
+    if (playerController) {
+      playerController.buildCollisionFromScene()
+    }
+  }, 100)
+
   // Create UI
   createStats()
   const pane = createTweakpane(
@@ -147,6 +166,32 @@ async function init() {
 
   // Initialize UI toggle with "/" key
   initUIToggle(pane)
+
+  // Handle camera mode switching based on UI visibility
+  onUIToggle((uiVisible) => {
+    debugMode = uiVisible
+    if (uiVisible) {
+      // Debug mode: use orbit controls, exit pointer lock
+      if (playerController.isLocked()) {
+        // Save player position as orbit target
+        const playerPos = playerController.getPosition()
+        setOrbitTarget(playerPos)
+      }
+      playerController.unlock()
+      setOrbitControlsEnabled(true)
+    } else {
+      // FPS mode: use pointer lock controls
+      setOrbitControlsEnabled(false)
+      playerController.lock()
+    }
+  })
+
+  // Click to enter FPS mode (when not in debug mode)
+  renderer.domElement.addEventListener("click", () => {
+    if (!debugMode && !playerController.isLocked()) {
+      playerController.lock()
+    }
+  })
 
   // Start animation loop
   renderer.setAnimationLoop(animate)
@@ -218,7 +263,18 @@ function onWindowResize() {
 }
 
 function animate() {
-  updateControls()
+  const deltaTime = clock.getDelta()
+
+  // Update player controller in FPS mode
+  if (playerController && !debugMode) {
+    playerController.update(deltaTime)
+  }
+
+  // Update orbit controls in debug mode
+  if (debugMode) {
+    updateControls()
+  }
+
   updateStats()
   renderPostProcessing()
 }

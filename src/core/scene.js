@@ -3,7 +3,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 
 let scene = null
 let camera = null
-let controls = null
+let orbitControls = null
+let orbitControlsEnabled = true
 
 export function createScene() {
   scene = new THREE.Scene()
@@ -13,22 +14,24 @@ export function createScene() {
 
 export function createCamera() {
   camera = new THREE.PerspectiveCamera(
-    35,
+    60,
     window.innerWidth / window.innerHeight,
     0.1,
-    20
+    50
   )
-  camera.position.set(-1.5, 1.0, 1.5)
+  camera.position.set(0, 0.8, 3)
   return camera
 }
 
 export function createControls(domElement) {
-  controls = new OrbitControls(camera, domElement)
-  controls.target.set(0, 0.5, 0)
-  controls.maxDistance = 50
-  controls.minDistance = 0.5
-  controls.update()
-  return controls
+  orbitControls = new OrbitControls(camera, domElement)
+  orbitControls.target.set(0, 0.5, 0)
+  orbitControls.maxDistance = 50
+  orbitControls.minDistance = 0.5
+  orbitControls.enableDamping = true
+  orbitControls.dampingFactor = 0.1
+  orbitControls.update()
+  return orbitControls
 }
 
 export function getScene() {
@@ -40,7 +43,21 @@ export function getCamera() {
 }
 
 export function getControls() {
-  return controls
+  return orbitControls
+}
+
+export function setOrbitControlsEnabled(enabled) {
+  orbitControlsEnabled = enabled
+  if (orbitControls) {
+    orbitControls.enabled = enabled
+  }
+}
+
+export function setOrbitTarget(position) {
+  if (orbitControls) {
+    orbitControls.target.copy(position)
+    orbitControls.target.y = 0.5 // Keep target at a reasonable height
+  }
 }
 
 export function resizeCamera() {
@@ -51,7 +68,7 @@ export function resizeCamera() {
 }
 
 export function updateControls() {
-  if (controls) {
-    controls.update()
+  if (orbitControls && orbitControlsEnabled) {
+    orbitControls.update()
   }
 }

@@ -3,6 +3,7 @@ import { setStatsVisible } from "./stats.js"
 
 let uiVisible = UI_VISIBLE_ON_START
 let pane = null
+let toggleCallbacks = []
 
 // Initialize UI toggle with "/" key
 export function initUIToggle(tweakpane) {
@@ -18,6 +19,14 @@ export function initUIToggle(tweakpane) {
       toggleUI()
     }
   })
+}
+
+// Register callback for UI toggle events
+export function onUIToggle(callback) {
+  toggleCallbacks.push(callback)
+  return () => {
+    toggleCallbacks = toggleCallbacks.filter(cb => cb !== callback)
+  }
 }
 
 // Toggle UI visibility
@@ -37,6 +46,9 @@ export function setUIVisible(visible) {
   if (pane) {
     pane.element.style.display = visible ? "block" : "none"
   }
+
+  // Notify callbacks
+  toggleCallbacks.forEach(cb => cb(visible))
 }
 
 export function isUIVisible() {

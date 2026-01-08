@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "three": "^0.182.0",
+    "three-mesh-bvh": "^0.9.5",
     "tweakpane": "^4.0.3"
   },
   "devDependencies": {
