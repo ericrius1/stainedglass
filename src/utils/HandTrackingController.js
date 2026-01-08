@@ -9,8 +9,7 @@ const DEFAULT_CONFIG = {
   numHands: 1,
   minDetectionConfidence: 0.5,
   minTrackingConfidence: 0.5,
-  modelAssetPath:
-    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+  modelAssetPath: "/hand_landmarker.task",
   wasmPath: "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm",
   landmark: 9, // Palm center (MIDDLE_FINGER_MCP)
   smoothing: 0.25 // Exponential smoothing factor (lower = smoother)
